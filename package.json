@@ -1,0 +1,18 @@
+{
+  "name": "mirror-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mirror — Reputation Intelligence Engine. Everyone has googled you. Now you can hear what they found.",
+  "workspaces": ["services/*", "frontend/*"],
+  "scripts": {
+    "dev:persona":   "npm run dev --workspace=services/persona-service",
+    "dev:profile":   "npm run dev --workspace=services/profile-service",
+    "dev:synthesis": "npm run dev --workspace=services/synthesis-service",
+    "dev:all":       "concurrently \"npm run dev:persona\" \"npm run dev:profile\" \"npm run dev:synthesis\"",
+    "build:all":     "npm run build --workspaces --if-present",
+    "test:all":      "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
