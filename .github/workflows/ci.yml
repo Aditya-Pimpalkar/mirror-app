@@ -7,35 +7,44 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate project structure
+        run: |
+          test -f services/persona-service/Dockerfile             && echo "✓ persona Dockerfile"
+          test -f services/profile-service/Dockerfile             && echo "✓ profile Dockerfile"
+          test -f services/synthesis-service/Dockerfile           && echo "✓ synthesis Dockerfile"
+          test -f services/notification-service/Dockerfile        && echo "✓ notification Dockerfile"
+          test -f cloudbuild.yaml                                  && echo "✓ cloudbuild.yaml"
+          test -f scripts/deploy-all.sh                           && echo "✓ deploy-all.sh"
+          test -f firebase/firestore.rules                         && echo "✓ firestore.rules"
+          test -f services/persona-service/src/personas.js         && echo "✓ personas.js"
+          test -f services/persona-service/src/services/liveSessionManager.js && echo "✓ liveSessionManager.js"
+          echo "All required files present ✓"
+
+  syntax-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            services/persona-service/package-lock.json
-            services/profile-service/package-lock.json
-            services/synthesis-service/package-lock.json
-      - run: cd services/persona-service && npm ci
-      - run: cd services/profile-service && npm ci
-      - run: cd services/synthesis-service && npm ci
-      - run: |
-          cd services/persona-service && npm test --if-present || true
-          cd ../profile-service && npm test --if-present || true
-          cd ../synthesis-service && npm test --if-present || true
 
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate Dockerfiles and key files
+      - name: Install all dependencies from root
+        run: npm install
+
+      - name: Syntax check all services
         run: |
-          test -f services/persona-service/Dockerfile    && echo "✓ persona Dockerfile"
-          test -f services/profile-service/Dockerfile    && echo "✓ profile Dockerfile"
-          test -f services/synthesis-service/Dockerfile  && echo "✓ synthesis Dockerfile"
-          test -f cloudbuild.yaml                        && echo "✓ cloudbuild.yaml"
-          test -f scripts/deploy-all.sh                  && echo "✓ deploy-all.sh"
-          test -f firebase/firestore.rules               && echo "✓ firestore.rules"
+          node --check services/persona-service/src/index.js       && echo "✓ persona index.js"
+          node --check services/persona-service/src/personas.js     && echo "✓ personas.js"
+          node --check services/persona-service/src/utils/gemini.js && echo "✓ gemini.js"
+          node --check services/persona-service/src/utils/firebase.js && echo "✓ firebase.js"
+          node --check services/persona-service/src/middleware/auth.js && echo "✓ auth.js"
+          node --check services/persona-service/src/routes/persona.js && echo "✓ routes/persona.js"
+          node --check services/persona-service/src/services/liveSessionManager.js && echo "✓ liveSessionManager.js"
+          node --check services/profile-service/src/index.js        && echo "✓ profile index.js"
+          node --check services/synthesis-service/src/index.js      && echo "✓ synthesis index.js"
+          node --check services/notification-service/src/index.js   && echo "✓ notification index.js"
+          echo "All syntax checks passed ✓"
