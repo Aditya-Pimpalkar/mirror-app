@@ -1,0 +1,136 @@
+# mirror/cloudbuild.yaml
+#
+# Cloud Build CI/CD Pipeline
+# Triggered on every push to main branch.
+# Builds, tests, and deploys all services to Cloud Run.
+# This file satisfies the hackathon's automated deployment bonus.
+
+steps:
+  # ── Step 1: Install dependencies and run tests ──────────────
+  - name: "node:20"
+    id: "install-and-test"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        cd services/persona-service && npm ci && npm test --if-present
+        cd ../profile-service && npm ci && npm test --if-present
+        cd ../synthesis-service && npm ci && npm test --if-present
+
+  # ── Step 2: Build Docker images ─────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-persona-service"
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/persona-service:${COMMIT_SHA}"
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/persona-service:latest"
+      - services/persona-service
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-profile-service"
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/profile-service:${COMMIT_SHA}"
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/profile-service:latest"
+      - services/profile-service
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-synthesis-service"
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/synthesis-service:${COMMIT_SHA}"
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/synthesis-service:latest"
+      - services/synthesis-service
+
+  # ── Step 3: Push images to Artifact Registry ────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-persona-service"
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/persona-service"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-profile-service"
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/profile-service"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-synthesis-service"
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/synthesis-service"]
+
+  # ── Step 4: Deploy to Cloud Run ──────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-persona-service"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - mirror-persona-service
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/persona-service:${COMMIT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --memory=1Gi
+      - --cpu=1
+      - --min-instances=1
+      - --max-instances=100
+      - --concurrency=80
+      - --set-env-vars=NODE_ENV=production,FIREBASE_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+      - --set-secrets=GEMINI_API_KEY=gemini-api-key:latest,JWT_SECRET=jwt-secret:latest
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-profile-service"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - mirror-profile-service
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/profile-service:${COMMIT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8081
+      - --memory=1Gi
+      - --cpu=1
+      - --min-instances=0
+      - --max-instances=50
+      - --set-env-vars=NODE_ENV=production,FIREBASE_PROJECT_ID=${PROJECT_ID}
+      - --set-secrets=GEMINI_API_KEY=gemini-api-key:latest
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-synthesis-service"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - mirror-synthesis-service
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/synthesis-service:${COMMIT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8082
+      - --memory=512Mi
+      - --cpu=1
+      - --min-instances=0
+      - --max-instances=20
+      - --set-env-vars=NODE_ENV=production,FIREBASE_PROJECT_ID=${PROJECT_ID}
+      - --set-secrets=GEMINI_API_KEY=gemini-api-key:latest,SCHEDULER_SECRET=scheduler-secret:latest
+
+# ── Substitution defaults ────────────────────────────────────
+substitutions:
+  _REGION: us-central1
+
+# ── Build options ────────────────────────────────────────────
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+# ── Artifacts ────────────────────────────────────────────────
+images:
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/persona-service:${COMMIT_SHA}"
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/profile-service:${COMMIT_SHA}"
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/mirror/synthesis-service:${COMMIT_SHA}"
