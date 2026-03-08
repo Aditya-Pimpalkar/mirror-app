@@ -97,7 +97,7 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
       return;
     }
     isPlayingRef.current = true;
-    if (gainNodeRef.current) gainNodeRef.current.gain.value = 0;
+    if (gainNodeRef.current) gainNodeRef.current.gain.value = 0.15;
 
     try {
       if (!audioContextRef.current || audioContextRef.current.state === "closed") {
