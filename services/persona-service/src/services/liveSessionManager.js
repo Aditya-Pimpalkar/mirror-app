@@ -19,6 +19,7 @@ const { v4: uuidv4 } = require("uuid");
 const { getLiveApiConfig, PERSONA_VOICES } = require("../utils/gemini");
 const { PERSONAS, scoreMessage } = require("../personas");
 const { getFirestore } = require("../utils/firebase");
+const admin = require("firebase-admin");
 
 // Active sessions: sessionId -> { geminiWs, clientWs, metadata }
 const activeSessions = new Map();
@@ -78,7 +79,7 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
       setup: {
         model: "models/" + (process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-native-audio-preview-12-2025"),
         system_instruction: {
-          parts: [{ text: systemPrompt }],
+          parts: [{ text: systemPrompt + "\n\nIMPORTANT: Never output your thinking process or internal reasoning. Respond directly and conversationally only." }],
         },
         generation_config: {
           response_modalities: ["AUDIO"],
@@ -90,6 +91,7 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
             },
           },
         },
+
       },
     }));
   });
@@ -113,17 +115,31 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
           initialBelief: session.currentBelief,
         });
 
-        // Send the opening line as text to be spoken
-        geminiWs.send(JSON.stringify({
-          client_content: {
-            turns: [{
-              role: "user",
-              parts: [{ text: `[Start the conversation with your opening line for ${userName}. Stay completely in character.]` }],
-            }],
-            turn_complete: true,
-          },
-        }));
         return;
+      }
+
+      // ── Input transcription (what user said) ──
+      if (msg.inputTranscription) {
+        console.log("[Transcript] Input:", JSON.stringify(msg.inputTranscription));
+      }
+      if (msg.outputTranscription) {
+        console.log("[Transcript] Output:", JSON.stringify(msg.outputTranscription));
+      }
+      if (msg.inputTranscription?.text) {
+        safeSend(clientWs, {
+          type: "user_transcript",
+          text: msg.inputTranscription.text,
+          isFinal: msg.inputTranscription.isFinal || false,
+        });
+      }
+
+      // ── Output transcription (what persona said) ──
+      if (msg.outputTranscription?.text) {
+        safeSend(clientWs, {
+          type: "persona_transcript",
+          text: msg.outputTranscription.text,
+          isFinal: msg.outputTranscription.isFinal || false,
+        });
       }
 
       // ── Server content (audio/text chunks from Gemini) ──
@@ -139,6 +155,8 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
 
         if (modelTurn?.parts) {
           for (const part of modelTurn.parts) {
+            // Skip thinking/reasoning parts
+            if (part.thought === true) continue;
             if (part.inlineData) {
               // Audio chunk — forward directly to client
               safeSend(clientWs, {
@@ -147,7 +165,7 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
                 data: part.inlineData.data,
               });
             }
-            if (part.text) {
+            if (part.text && part.thought !== true) {
               // Text chunk — forward and accumulate for logging
               session._currentResponseText = (session._currentResponseText || "") + part.text;
               safeSend(clientWs, {
@@ -230,14 +248,25 @@ async function handleClientMessage(sessionId, msg) {
     // ── Audio from user's microphone ──
     case "audio_input": {
       if (geminiWs.readyState !== WebSocket.OPEN) return;
+      if (!session.isReady) return;
+      session._hasReceivedAudio = true;
       geminiWs.send(JSON.stringify({
         realtime_input: {
           media_chunks: [{
-            mime_type: msg.mimeType || "audio/pcm;rate=16000",
+            mime_type: "audio/pcm;rate=16000",
             data: msg.data,
           }],
         },
       }));
+      break;
+    }
+
+    case "mic_stopped": {
+      // User stopped mic — add a placeholder user bubble
+      if (session._hasReceivedAudio) {
+        session._hasReceivedAudio = false;
+        safeSend(clientWs, { type: "user_speaking_done" });
+      }
       break;
     }
 

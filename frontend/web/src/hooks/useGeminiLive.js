@@ -1,6 +1,4 @@
-// src/hooks/useGeminiLive.js
-// Manages the Gemini Live WebSocket connection for voice conversations
-
+"use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { getIdToken } from "../lib/firebase";
 
@@ -13,239 +11,210 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const wsRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
   const audioContextRef = useRef(null);
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
+  const streamRef = useRef(null);
+  const processorRef = useRef(null);
+  const sourceRef = useRef(null);
+  const micCtxRef = useRef(null);
 
-  // ── Connect to Gemini Live WebSocket ──────────────────────────────────────
-
+  // ── Connect ───────────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     try {
       const token = await getIdToken();
       const wsUrl = `${PERSONA_SERVICE_WS}/live?token=${token}&persona=${personaId}`;
-
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => {
-        console.log("[GeminiLive] Connected");
-        setIsConnected(true);
-      };
+      ws.onopen = () => { console.log("[Live] Connected"); setIsConnected(true); };
 
       ws.onmessage = async (event) => {
         try {
           const msg = JSON.parse(event.data);
-          await handleServerMessage(msg);
-        } catch (err) {
-          console.error("[GeminiLive] Message parse error:", err);
-        }
+          if (msg.type === "session_ready") {
+            onSessionReady?.(msg);
+          } else if (msg.type === "audio_chunk") {
+            audioQueueRef.current.push(msg.data);
+            setIsSpeaking(true);
+            if (!isPlayingRef.current) playNextChunk();
+          } else if (msg.type === "text_chunk") {
+            onMessage?.({ type: "chunk", text: msg.text });
+          } else if (msg.type === "turn_complete") {
+            setIsSpeaking(false);
+            onMessage?.({ type: "turn_complete", text: msg.text, belief: msg.belief });
+            onBeliefUpdate?.({ belief: msg.belief });
+          } else if (msg.type === "user_transcript") {
+            onMessage?.({ type: "user_transcript", text: msg.text, isFinal: msg.isFinal });
+          } else if (msg.type === "persona_transcript") {
+            onMessage?.({ type: "persona_transcript", text: msg.text, isFinal: msg.isFinal });
+          } else if (msg.type === "interrupted") {
+            setIsSpeaking(false);
+            stopAudio();
+            onMessage?.({ type: "interrupted" });
+          } else if (msg.type === "session_closed") {
+            setIsConnected(false);
+          } else if (msg.type === "error") {
+            onError?.(msg.message);
+          }
+        } catch (e) { console.error("[Live] Parse error:", e); }
       };
 
-      ws.onclose = (event) => {
-        console.log("[GeminiLive] Disconnected:", event.code, event.reason);
+      ws.onclose = () => {
+        console.log("[Live] Disconnected");
         setIsConnected(false);
         setIsListening(false);
         setIsSpeaking(false);
+        wsRef.current = null;
+        stopMic();
       };
 
-      ws.onerror = (err) => {
-        console.error("[GeminiLive] Error:", err);
-        onError?.("Connection error. Please try again.");
+      ws.onerror = () => {
+        onError?.("Connection error");
         setIsConnected(false);
       };
-
-    } catch (err) {
-      console.error("[GeminiLive] Connect failed:", err);
-      onError?.("Failed to connect. Please try again.");
+    } catch (e) {
+      console.error("[Live] Connect failed:", e);
+      onError?.("Failed to connect");
     }
   }, [personaId]);
 
-  // ── Handle messages from server ───────────────────────────────────────────
-
-  const handleServerMessage = useCallback(async (msg) => {
-    switch (msg.type) {
-      case "session_ready":
-        onSessionReady?.(msg);
-        break;
-
-      case "audio_chunk":
-        // Queue audio chunk for playback
-        audioQueueRef.current.push(msg.data);
-        setIsSpeaking(true);
-        if (!isPlayingRef.current) playNextAudioChunk();
-        break;
-
-      case "text_chunk":
-        onMessage?.({ type: "chunk", text: msg.text });
-        break;
-
-      case "turn_complete":
-        setIsSpeaking(false);
-        onMessage?.({ type: "turn_complete", text: msg.text, belief: msg.belief });
-        break;
-
-      case "belief_update":
-        onBeliefUpdate?.(msg);
-        break;
-
-      case "interrupted":
-        setIsSpeaking(false);
-        stopAudio();
-        onMessage?.({ type: "interrupted" });
-        break;
-
-      case "error":
-        onError?.(msg.message);
-        break;
-
-      case "session_closed":
-        setIsConnected(false);
-        break;
-    }
-  }, [onMessage, onBeliefUpdate, onSessionReady, onError]);
-
-  // ── Audio playback ────────────────────────────────────────────────────────
-
-  const playNextAudioChunk = useCallback(async () => {
+  // ── Audio playback (PCM16 @ 24kHz) ───────────────────────────────────────
+  const playNextChunk = useCallback(async () => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false;
       setIsSpeaking(false);
       return;
     }
-
     isPlayingRef.current = true;
 
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       }
+      const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
 
       const chunk = audioQueueRef.current.shift();
-      const audioData = Uint8Array.from(atob(chunk), (c) => c.charCodeAt(0));
-      const audioBuffer = await audioContextRef.current.decodeAudioData(audioData.buffer);
+      const bytes = Uint8Array.from(atob(chunk), c => c.charCodeAt(0));
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
 
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContextRef.current.destination);
-      source.onended = () => playNextAudioChunk();
-      source.start();
-
-    } catch (err) {
-      console.error("[GeminiLive] Audio playback error:", err);
-      playNextAudioChunk(); // Skip bad chunk
+      const buf = ctx.createBuffer(1, float32.length, 24000);
+      buf.copyToChannel(float32, 0);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.onended = () => playNextChunk();
+      src.start();
+    } catch (e) {
+      console.error("[Live] Playback error:", e);
+      playNextChunk();
     }
   }, []);
 
   const stopAudio = useCallback(() => {
     audioQueueRef.current = [];
     isPlayingRef.current = false;
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
-      } catch {}
-    }
+    try { audioContextRef.current?.close(); } catch {}
+    audioContextRef.current = null;
   }, []);
 
-  // ── Microphone input ──────────────────────────────────────────────────────
-
+  // ── Mic capture (PCM16 @ 16kHz) ──────────────────────────────────────────
   const startListening = useCallback(async () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn("[Live] WS not open");
+      return;
+    }
+    if (isListening) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
+      streamRef.current = stream;
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
+      const micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      micCtxRef.current = micCtx;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64 = reader.result.split(",")[1];
-            wsRef.current.send(JSON.stringify({
-              type: "audio_input",
-              mimeType: "audio/webm;codecs=opus",
-              data: base64,
-            }));
-          };
-          reader.readAsDataURL(event.data);
+      const source = micCtx.createMediaStreamSource(stream);
+      sourceRef.current = source;
+
+      const processor = micCtx.createScriptProcessor(2048, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (e) => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        const float32 = e.inputBuffer.getChannelData(0);
+        
+        const pcm16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          pcm16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
         }
+        const bytes = new Uint8Array(pcm16.buffer);
+        let binary = "";
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        wsRef.current.send(JSON.stringify({
+          type: "audio_input",
+          mimeType: "audio/pcm;rate=16000",
+          data: btoa(binary),
+        }));
       };
 
-      mediaRecorder.start(100); // Send chunks every 100ms
-      mediaRecorderRef.current = mediaRecorder;
+      source.connect(processor);
+      processor.connect(micCtx.destination);
       setIsListening(true);
-
-    } catch (err) {
-      console.error("[GeminiLive] Mic error:", err);
-      onError?.("Microphone access denied. Please enable mic permissions.");
+      console.log("[Live] Mic started");
+    } catch (e) {
+      console.error("[Live] Mic error:", e);
+      onError?.("Microphone access denied.");
     }
-  }, [onError]);
+  }, [isListening, onError]);
 
-  const stopListening = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
-      mediaRecorderRef.current = null;
-    }
+  const stopMic = useCallback(() => {
+    try { processorRef.current?.disconnect(); } catch {}
+    try { sourceRef.current?.disconnect(); } catch {}
+    try { micCtxRef.current?.close(); } catch {}
+    try { streamRef.current?.getTracks().forEach(t => t.stop()); } catch {}
+    processorRef.current = null;
+    sourceRef.current = null;
+    micCtxRef.current = null;
+    streamRef.current = null;
     setIsListening(false);
   }, []);
 
-  // ── Send text message (fallback) ──────────────────────────────────────────
+  const stopListening = useCallback(() => {
+    stopMic();
+    // Signal to server that mic stopped
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "mic_stopped" }));
+    }
+    console.log("[Live] Mic stopped");
+  }, [stopMic]);
 
   const sendText = useCallback((text) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: "text_input", text }));
   }, []);
 
-  // ── Send emotion frame ────────────────────────────────────────────────────
-
-  const sendEmotionFrame = useCallback((emotion) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "emotion_frame", emotion }));
-  }, []);
-
-  // ── Disconnect ────────────────────────────────────────────────────────────
-
   const disconnect = useCallback(() => {
-    stopListening();
+    stopMic();
     stopAudio();
     if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ type: "end_session" }));
+      try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
       wsRef.current.close();
       wsRef.current = null;
     }
     setIsConnected(false);
-  }, [stopListening, stopAudio]);
+  }, [stopMic, stopAudio]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, []);
+  useEffect(() => () => disconnect(), []);
 
-  return {
-    isConnected,
-    isListening,
-    isSpeaking,
-    connect,
-    disconnect,
-    startListening,
-    stopListening,
-    sendText,
-    sendEmotionFrame,
-  };
+  return { isConnected, isListening, isSpeaking, connect, disconnect, startListening, stopListening, sendText };
 }
