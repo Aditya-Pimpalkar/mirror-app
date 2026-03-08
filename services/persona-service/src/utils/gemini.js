@@ -101,27 +101,20 @@ async function streamPersonaResponse(systemPrompt, conversationHistory, onChunk)
  */
 function getLiveApiConfig(systemPrompt, personaVoice) {
   return {
-    model: process.env.GEMINI_LIVE_MODEL || "gemini-2.0-flash-live-001",
-    config: {
-      response_modalities: ["AUDIO", "TEXT"],
+    model: process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-native-audio-preview-12-2025",
+    setup: {
+      model: "models/" + (process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-native-audio-preview-12-2025"),
       system_instruction: {
         parts: [{ text: systemPrompt }],
       },
-      speech_config: {
-        voice_config: {
-          // Map persona voice styles to Gemini voice options
-          // Available: Puck, Charon, Kore, Fenrir, Aoede
-          prebuilt_voice_config: {
-            voice_name: personaVoice,
+      generation_config: {
+        response_modalities: ["AUDIO"],
+        speech_config: {
+          voice_config: {
+            prebuilt_voice_config: {
+              voice_name: personaVoice || "Kore",
+            },
           },
-        },
-      },
-      // Enable real-time interruption detection
-      realtime_input_config: {
-        automatic_activity_detection: {
-          disabled: false,
-          start_of_speech_sensitivity: "START_SENSITIVITY_MEDIUM",
-          end_of_speech_sensitivity: "END_SENSITIVITY_MEDIUM",
         },
       },
     },

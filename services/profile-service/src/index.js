@@ -65,68 +65,68 @@ async function buildDossier(rawBio, scrapedContent = [], userName) {
     ? `\n\nADDITIONAL SCRAPED CONTENT:\n${scrapedContent.map((s) => `[${s.source}]: ${s.content}`).join("\n\n")}`
     : "";
 
-  const prompt = `You are building a dossier for an AI persona system. The subject is ${userName}.
+  const prompt = `Extract information about this person and return JSON.
 
-RAW INPUT:
-${rawBio}
-${scrapedSection}
+Person: ${userName}
+Bio: ${rawBio.slice(0, 1000)}
+${scrapedContent.length > 0 ? "Additional context: " + scrapedContent.map(s => s.content?.slice(0, 200)).join(" ") : ""}
 
-Extract and structure everything into a comprehensive dossier for 4 personas who will interview this person.
-Return ONLY valid JSON:
+IMPORTANT: Use ONLY information stated above. Do not invent anything.
+
+Return this exact JSON:
 {
-  "summary": "3-sentence neutral summary of who this person is",
+  "summary": "2 sentences about who this person is based only on stated facts",
   "career": {
-    "current_role": "string or null",
-    "industry": "string",
-    "notable_companies": ["array"],
-    "career_narrative": "paragraph describing career arc",
-    "gaps_or_pivots": ["any notable career gaps or unexplained moves"],
-    "claimed_achievements": ["specific achievements mentioned"]
+    "current_role": "their current role or null",
+    "industry": "their industry",
+    "notable_companies": ["companies explicitly mentioned"],
+    "career_narrative": "2 sentences about their career arc",
+    "gaps_or_pivots": [],
+    "claimed_achievements": ["specific achievements mentioned with numbers"]
   },
   "personal": {
     "values_stated": ["values they explicitly mention"],
-    "interests": ["hobbies, passions"],
-    "relationship_signals": ["how they talk about people, relationships"],
-    "communication_style": "description"
+    "interests": [],
+    "relationship_signals": [],
+    "communication_style": "based on their writing style"
   },
   "public_presence": {
-    "platforms": ["platforms they're on"],
-    "brand_narrative": "what they're trying to project",
-    "inconsistencies": ["things that don't quite add up"],
-    "notable_content": ["any notable posts, articles, projects mentioned"]
+    "platforms": ["platforms they mention"],
+    "brand_narrative": "what they are positioning themselves as",
+    "inconsistencies": [],
+    "notable_content": []
   },
-  "red_flags": ["things that warrant probing from any persona"],
-  "strengths": ["genuine strengths that come through"],
-  "open_questions": ["questions each persona would likely ask"]
+  "red_flags": [],
+  "strengths": ["genuine strengths from stated facts"],
+  "open_questions": ["3 specific follow-up questions based on their actual background"]
 }`;
 
   const result = await model.generateContent(prompt);
-  let rawText = result.response.text().replace(/```json|```/g, "").trim();
-  // Handle truncated JSON by finding the last complete object
+
+  // responseMimeType: "application/json" guarantees valid JSON — parse directly
   try {
-    return JSON.parse(rawText);
-  } catch(e) {
-    // Try to find and fix truncated JSON
-    const lastBrace = rawText.lastIndexOf('}');
-    if (lastBrace > 0) {
-      try {
-        return JSON.parse(rawText.slice(0, lastBrace + 1) + '}');
-      } catch {}
-    }
-    // Return a safe fallback dossier
-    console.warn('[buildDossier] JSON parse failed, using fallback');
+    return JSON.parse(result.response.text());
+  } catch (e) {
+    console.warn("[buildDossier] JSON parse failed:", e.message);
+    console.warn("[buildDossier] Raw response:", result.response.text().slice(0, 200));
     return {
-      summary: "Profile parsed from user input.",
-      career: { current_role: null, industry: "Unknown", notable_companies: [], career_narrative: rawText.slice(0, 300), gaps_or_pivots: [], claimed_achievements: [] },
-      personal: { values_stated: [], interests: [], relationship_signals: [], communication_style: "Unknown" },
+      summary: "Profile captured from user input.",
+      career: {
+        current_role: null,
+        industry: "Technology",
+        notable_companies: [],
+        career_narrative: rawBio.slice(0, 300),
+        gaps_or_pivots: [],
+        claimed_achievements: [],
+      },
+      personal: { values_stated: [], interests: [], relationship_signals: [], communication_style: "Direct" },
       public_presence: { platforms: [], brand_narrative: "", inconsistencies: [], notable_content: [] },
       red_flags: [],
       strengths: [],
-      open_questions: ["Tell me more about yourself.", "What are you working on right now?", "What brought you here today?"]
+      open_questions: ["What are your current career goals?", "What are you working on right now?", "What made you try Mirror today?"],
     };
   }
-}
-
+};
 // ─── URL Scraper ──────────────────────────────────────────────────────────────
 
 /**

@@ -73,10 +73,23 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
     console.log(`[LiveSession:${sessionId}] Gemini WS connected`);
 
     // Send setup message — this is the Gemini Live API handshake
+    // Setup format verified working — system_instruction must be at setup level
     geminiWs.send(JSON.stringify({
       setup: {
-        model: liveConfig.model,
-        generation_config: liveConfig.config,
+        model: "models/" + (process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-native-audio-preview-12-2025"),
+        system_instruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        generation_config: {
+          response_modalities: ["AUDIO"],
+          speech_config: {
+            voice_config: {
+              prebuilt_voice_config: {
+                voice_name: voiceName || "Kore",
+              },
+            },
+          },
+        },
       },
     }));
   });
