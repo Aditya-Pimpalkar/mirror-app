@@ -18,6 +18,7 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
   const processorRef = useRef(null);
   const sourceRef = useRef(null);
   const micCtxRef = useRef(null);
+  const gainNodeRef = useRef(null);
 
   // ── Connect ───────────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
@@ -92,9 +93,11 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false;
       setIsSpeaking(false);
+      if (gainNodeRef.current) gainNodeRef.current.gain.value = 1.0;
       return;
     }
     isPlayingRef.current = true;
+    if (gainNodeRef.current) gainNodeRef.current.gain.value = 0;
 
     try {
       if (!audioContextRef.current || audioContextRef.current.state === "closed") {
@@ -178,7 +181,11 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
         }));
       };
 
-      source.connect(processor);
+      const gainNode = micCtx.createGain();
+      gainNode.gain.value = 1.0;
+      gainNodeRef.current = gainNode;
+      source.connect(gainNode);
+      gainNode.connect(processor);
       processor.connect(micCtx.destination);
       setIsListening(true);
       console.log("[Live] Mic started");
@@ -190,7 +197,9 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
 
   const stopMic = useCallback(() => {
     try { processorRef.current?.disconnect(); } catch {}
+    try { gainNodeRef.current?.disconnect(); } catch {}
     try { sourceRef.current?.disconnect(); } catch {}
+    gainNodeRef.current = null;
     try { micCtxRef.current?.close(); } catch {}
     try { streamRef.current?.getTracks().forEach(t => t.stop()); } catch {}
     processorRef.current = null;
