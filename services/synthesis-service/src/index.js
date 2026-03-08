@@ -162,7 +162,7 @@ app.post("/synthesis/perception-map", requireAuth, async (req, res) => {
     // Generate with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 1200, temperature: 0.7, responseMimeType: "application/json" },
+      generationConfig: { maxOutputTokens: 2000, temperature: 0.7, responseMimeType: "application/json" },
     });
 
     const prompt = `Generate a Perception Map for ${profile.userName}.
@@ -305,7 +305,7 @@ app.post("/synthesis/weekly-report", async (req, res) => {
     // Generate report with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 600, temperature: 0.75 },
+      generationConfig: { maxOutputTokens: 2000, temperature: 0.75 },
     });
 
     const result = await model.generateContent(`

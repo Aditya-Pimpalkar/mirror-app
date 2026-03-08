@@ -53,7 +53,7 @@ async function requireAuth(req, res, next) {
  */
 async function buildDossier(rawBio, scrapedContent = [], userName) {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     generationConfig: {
       maxOutputTokens: 3000,
       temperature: 0.3,
@@ -136,7 +136,7 @@ Return ONLY valid JSON:
 async function scrapeUrl(url) {
   try {
     // Use Gemini to analyze the URL content directly
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
 
     const result = await model.generateContent({
       contents: [{
@@ -270,7 +270,7 @@ app.post("/profile/update", requireAuth, async (req, res) => {
     const existing = doc.data();
 
     // Use Gemini to merge the update into existing dossier
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
     const result = await model.generateContent(`
 Existing dossier summary: ${existing.structured.summary}
 New update from user: "${update}"

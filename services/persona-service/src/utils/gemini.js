@@ -29,7 +29,7 @@ const SAFETY_SETTINGS = [
  */
 async function generatePersonaResponse(systemPrompt, conversationHistory, maxOutputTokens = 300) {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     systemInstruction: systemPrompt,
     safetySettings: SAFETY_SETTINGS,
     generationConfig: {
@@ -64,7 +64,7 @@ async function generatePersonaResponse(systemPrompt, conversationHistory, maxOut
  */
 async function streamPersonaResponse(systemPrompt, conversationHistory, onChunk) {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     systemInstruction: systemPrompt,
     safetySettings: SAFETY_SETTINGS,
     generationConfig: {
