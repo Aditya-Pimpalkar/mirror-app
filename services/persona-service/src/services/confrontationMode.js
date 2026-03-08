@@ -52,7 +52,7 @@ async function runConfrontation({ userId, userName, dossier, statement, currentB
       const response = await generatePersonaResponse(
         systemPrompt,
         [{ role: "user", content: statement }],
-        200 // Shorter responses in confrontation mode — punchy
+        800 // Full responses in confrontation mode
       );
 
       return {

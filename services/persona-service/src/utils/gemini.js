@@ -27,7 +27,7 @@ const SAFETY_SETTINGS = [
  * Generate a persona response for a given conversation turn.
  * Used for text-based fallback when Live API is unavailable.
  */
-async function generatePersonaResponse(systemPrompt, conversationHistory, maxOutputTokens = 300) {
+async function generatePersonaResponse(systemPrompt, conversationHistory, maxOutputTokens = 800) {
   const model = genAI.getGenerativeModel({
     model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     systemInstruction: systemPrompt,
