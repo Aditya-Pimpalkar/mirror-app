@@ -202,6 +202,7 @@ Return ONLY valid JSON:
     const perceptionMap = {
       ...mapData,
       archetype,
+      archetype_id: mapData.archetype_id || archetype?.id,
       gapScore,
       beliefs,
       generatedAt: new Date().toISOString(),
@@ -356,34 +357,85 @@ app.get("/synthesis/mirror-moment", requireAuth, async (req, res) => {
     if (!profileDoc.exists) return res.json({ moment: null });
 
     const profile = profileDoc.data();
-    const personas = ["recruiter", "date", "competitor", "journalist"];
+    const personaIds = ["recruiter", "date", "competitor", "journalist"];
     const personaNames = { recruiter: "Rachel", date: "Alex", competitor: "Chris", journalist: "Jordan" };
-    const todayPersona = personas[new Date().getDay() % personas.length];
-    const pName = personaNames[todayPersona];
+
+    // Pick persona that has most recent conversation — not by day of week
+    let chosenPersona = "recruiter";
+    let latestTime = 0;
+
+    for (const id of personaIds) {
+      const personaDoc = await db.collection("users").doc(userId).collection("personas").doc(id).get();
+      if (personaDoc.exists && personaDoc.data().lastSessionAt) {
+        const t = new Date(personaDoc.data().lastSessionAt).getTime();
+        if (t > latestTime) { latestTime = t; chosenPersona = id; }
+      }
+    }
+
+    const pName = personaNames[chosenPersona];
+
+    // Load last session messages for context
+    const todayId = new Date().toISOString().split("T")[0];
+    const sessionDoc = await db
+      .collection("users").doc(userId)
+      .collection("personas").doc(chosenPersona)
+      .collection("sessions").doc(`text-${todayId}`)
+      .get();
+
+    // Also try recent sessions
+    const recentSessions = await db
+      .collection("users").doc(userId)
+      .collection("personas").doc(chosenPersona)
+      .collection("sessions")
+      .orderBy("startedAt", "desc")
+      .limit(2)
+      .get();
+
+    const recentMessages = recentSessions.docs
+      .flatMap(d => d.data().messages || [])
+      .filter(m => m.role === "user" && m.content?.length > 20)
+      .slice(-5)
+      .map(m => m.content.slice(0, 150))
+      .join("\n");
 
     const model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 500, temperature: 0.9 },
+      generationConfig: { maxOutputTokens: 800, temperature: 0.4 },
     });
 
-    const result = await model.generateContent(
-      `You are ${pName}, speaking directly to ${profile.userName}.
-You know this about them: ${profile.structured?.summary || profile.rawBio?.slice(0, 200)}
+    const profileSummary = profile.structured?.summary || profile.rawBio?.slice(0, 200) || "";
 
-Write one complete, pointed, personal question for them to sit with today.
-The question must be specific to this person — not generic self-help.
-Write ONLY the complete question itself ending with a question mark. Nothing else. No preamble.
-Start your response with: "${pName} wants to know: "`
-    );
+    const prompt = [
+      "You are " + pName + ", an AI persona who has been having real conversations with " + profile.userName + ".",
+      "",
+      "What you know about them from their profile:",
+      profileSummary,
+      "",
+      recentMessages ? "What they actually said in your recent conversations:" : "",
+      recentMessages || "",
+      "",
+      "Based ONLY on what they have actually said or shared above, write ONE pointed follow-up question.",
+      "The question should reference something specific they mentioned — a word, a situation, a tension you noticed.",
+      "It should feel like you were listening and remembered something specific.",
+      "Do NOT invent details. Do NOT be generic. If they mentioned a project, a struggle, a person — reference it.",
+      "The question must end with a question mark.",
+      "Write only the question text. No quotes. No name prefix.",
+    ].join("\n");
 
-    const moment = result.response.text().trim();
-    res.json({ moment, persona: todayPersona, date: new Date().toISOString() });
+    const result = await model.generateContent(prompt);
+    let rawMoment = result.response.text().trim().replace(/^["']|["']$/g, "");
+    if (!rawMoment.endsWith("?")) rawMoment = rawMoment + "?";
+    const moment = pName + " wants to know: " + rawMoment;
+
+    res.json({ moment, persona: chosenPersona, personaName: pName, date: new Date().toISOString() });
 
   } catch (err) {
     console.error("[mirror-moment]", err.message);
     res.status(500).json({ error: "Failed to generate mirror moment" });
   }
 });
+
+
 
 
 
@@ -404,9 +456,19 @@ app.get("/synthesis/archetype", requireAuth, async (req, res) => {
     if (reports.empty) return res.json({ archetype: null });
 
     const latest = reports.docs[0].data();
-    const archetype = ARCHETYPES[latest.archetype_id] || null;
+    // Try multiple field locations
+    const archetypeId = latest.archetype_id || latest.archetype?.id;
+    const archetype = archetypeId
+      ? (ARCHETYPES[archetypeId] || {
+          id: archetypeId,
+          name: archetypeId.charAt(0).toUpperCase() + archetypeId.slice(1),
+          icon: "🔮",
+          desc: "Your reputation archetype.",
+          detail: "Based on your persona conversations."
+        })
+      : (latest.archetype || null);
 
-    res.json({ archetype, confidence: latest.archetype_confidence, generatedAt: latest.generatedAt });
+    res.json({ archetype, confidence: latest.archetype_confidence || latest.archetype?.confidence, generatedAt: latest.generatedAt });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch archetype" });
   }
