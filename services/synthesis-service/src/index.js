@@ -357,30 +357,35 @@ app.get("/synthesis/mirror-moment", requireAuth, async (req, res) => {
 
     const profile = profileDoc.data();
     const personas = ["recruiter", "date", "competitor", "journalist"];
+    const personaNames = { recruiter: "Rachel", date: "Alex", competitor: "Chris", journalist: "Jordan" };
     const todayPersona = personas[new Date().getDay() % personas.length];
+    const pName = personaNames[todayPersona];
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 100, temperature: 0.9 },
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      generationConfig: { maxOutputTokens: 500, temperature: 0.9 },
     });
 
-    const result = await model.generateContent(`
-You are ${todayPersona} from the Mirror app. Based on what you know about ${profile.userName}:
-${profile.structured?.summary || profile.rawBio?.slice(0, 200)}
+    const result = await model.generateContent(
+      `You are ${pName}, speaking directly to ${profile.userName}.
+You know this about them: ${profile.structured?.summary || profile.rawBio?.slice(0, 200)}
 
-Write ONE Mirror Moment — a single pointed, slightly uncomfortable question that this person should sit with today.
-The question should feel personal and specific, not generic.
-It should be 1-2 sentences max.
-Start with "${todayPersona === "recruiter" ? "Rachel" : todayPersona === "date" ? "Alex" : todayPersona === "competitor" ? "Chris" : "Jordan"} wants to know:"`);
+Write one complete, pointed, personal question for them to sit with today.
+The question must be specific to this person — not generic self-help.
+Write ONLY the complete question itself ending with a question mark. Nothing else. No preamble.
+Start your response with: "${pName} wants to know: "`
+    );
 
     const moment = result.response.text().trim();
-
     res.json({ moment, persona: todayPersona, date: new Date().toISOString() });
 
   } catch (err) {
+    console.error("[mirror-moment]", err.message);
     res.status(500).json({ error: "Failed to generate mirror moment" });
   }
 });
+
+
 
 /**
  * GET /synthesis/archetype
