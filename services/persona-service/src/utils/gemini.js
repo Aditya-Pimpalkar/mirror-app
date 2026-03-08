@@ -29,7 +29,7 @@ const SAFETY_SETTINGS = [
  */
 async function generatePersonaResponse(systemPrompt, conversationHistory, maxOutputTokens = 300) {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-1.5-pro",
+    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
     systemInstruction: systemPrompt,
     safetySettings: SAFETY_SETTINGS,
     generationConfig: {
@@ -64,11 +64,11 @@ async function generatePersonaResponse(systemPrompt, conversationHistory, maxOut
  */
 async function streamPersonaResponse(systemPrompt, conversationHistory, onChunk) {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-1.5-pro",
+    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
     systemInstruction: systemPrompt,
     safetySettings: SAFETY_SETTINGS,
     generationConfig: {
-      maxOutputTokens: 300,
+      maxOutputTokens: 1000,
       temperature: 0.85,
     },
   });
@@ -146,9 +146,9 @@ const PERSONA_VOICES = {
  */
 async function analyzeFaceEmotion(base64ImageFrame) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro",
+    model: "gemini-2.5-flash",
     generationConfig: {
-      maxOutputTokens: 200,
+      maxOutputTokens: 800,
       temperature: 0.2, // Low temperature for factual observation
       responseMimeType: "application/json",
     },
@@ -189,7 +189,7 @@ Return ONLY a JSON object with this exact structure, no markdown:
  */
 async function generatePerceptionMap(userName, userBio, conversationSummaries, beliefScores) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro",
+    model: "gemini-2.5-flash",
     generationConfig: {
       maxOutputTokens: 1000,
       temperature: 0.7,

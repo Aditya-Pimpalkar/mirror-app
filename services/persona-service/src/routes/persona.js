@@ -177,3 +177,51 @@ async function persistChatTurn(db, userId, personaId, userMsg, assistantMsg, new
 }
 
 module.exports = router;
+
+// ─── GET /personas/all-status ─────────────────────────────────────────────────
+// Returns all persona statuses + recent messages in one call (for page reload)
+router.get("/all-status", requireAuth, async (req, res) => {
+  const userId = req.user.uid;
+  const personaIds = ["recruiter", "date", "competitor", "journalist"];
+
+  try {
+    const db = getFirestore();
+    const results = await Promise.all(
+      personaIds.map(async (personaId) => {
+        // Get persona status
+        const statusDoc = await db
+          .collection("users").doc(userId)
+          .collection("personas").doc(personaId)
+          .get();
+
+        // Get today's session messages
+        const todayId = new Date().toISOString().split("T")[0];
+        const sessionDoc = await db
+          .collection("users").doc(userId)
+          .collection("personas").doc(personaId)
+          .collection("sessions").doc(`text-${todayId}`)
+          .get();
+
+        const messages = sessionDoc.exists
+          ? sessionDoc.data().messages || []
+          : [];
+
+        return {
+          personaId,
+          currentBelief: statusDoc.exists
+            ? statusDoc.data().currentBelief
+            : require("../personas").PERSONAS[personaId]?.initialBelief || 20,
+          conversationCount: statusDoc.exists
+            ? statusDoc.data().conversationCount || 0
+            : 0,
+          messages: messages.slice(-20), // Last 20 messages
+        };
+      })
+    );
+
+    res.json({ personas: results });
+  } catch (err) {
+    console.error("[GET /personas/all-status]", err.message);
+    res.status(500).json({ error: "Failed to fetch all statuses" });
+  }
+});

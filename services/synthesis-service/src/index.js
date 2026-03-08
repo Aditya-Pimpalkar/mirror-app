@@ -161,7 +161,7 @@ app.post("/synthesis/perception-map", requireAuth, async (req, res) => {
 
     // Generate with Gemini
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-pro",
+      model: "gemini-2.5-flash",
       generationConfig: { maxOutputTokens: 1200, temperature: 0.7, responseMimeType: "application/json" },
     });
 
@@ -304,7 +304,7 @@ app.post("/synthesis/weekly-report", async (req, res) => {
 
     // Generate report with Gemini
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-pro",
+      model: "gemini-2.5-flash",
       generationConfig: { maxOutputTokens: 600, temperature: 0.75 },
     });
 
@@ -360,7 +360,7 @@ app.get("/synthesis/mirror-moment", requireAuth, async (req, res) => {
     const todayPersona = personas[new Date().getDay() % personas.length];
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-pro",
+      model: "gemini-2.5-flash",
       generationConfig: { maxOutputTokens: 100, temperature: 0.9 },
     });
 

@@ -53,9 +53,9 @@ async function requireAuth(req, res, next) {
  */
 async function buildDossier(rawBio, scrapedContent = [], userName) {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-1.5-pro",
+    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
     generationConfig: {
-      maxOutputTokens: 1500,
+      maxOutputTokens: 3000,
       temperature: 0.3,
       responseMimeType: "application/json",
     },
@@ -101,7 +101,30 @@ Return ONLY valid JSON:
 }`;
 
   const result = await model.generateContent(prompt);
-  return JSON.parse(result.response.text().replace(/```json|```/g, "").trim());
+  let rawText = result.response.text().replace(/```json|```/g, "").trim();
+  // Handle truncated JSON by finding the last complete object
+  try {
+    return JSON.parse(rawText);
+  } catch(e) {
+    // Try to find and fix truncated JSON
+    const lastBrace = rawText.lastIndexOf('}');
+    if (lastBrace > 0) {
+      try {
+        return JSON.parse(rawText.slice(0, lastBrace + 1) + '}');
+      } catch {}
+    }
+    // Return a safe fallback dossier
+    console.warn('[buildDossier] JSON parse failed, using fallback');
+    return {
+      summary: "Profile parsed from user input.",
+      career: { current_role: null, industry: "Unknown", notable_companies: [], career_narrative: rawText.slice(0, 300), gaps_or_pivots: [], claimed_achievements: [] },
+      personal: { values_stated: [], interests: [], relationship_signals: [], communication_style: "Unknown" },
+      public_presence: { platforms: [], brand_narrative: "", inconsistencies: [], notable_content: [] },
+      red_flags: [],
+      strengths: [],
+      open_questions: ["Tell me more about yourself.", "What are you working on right now?", "What brought you here today?"]
+    };
+  }
 }
 
 // ─── URL Scraper ──────────────────────────────────────────────────────────────
@@ -113,7 +136,7 @@ Return ONLY valid JSON:
 async function scrapeUrl(url) {
   try {
     // Use Gemini to analyze the URL content directly
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.0-flash" });
 
     const result = await model.generateContent({
       contents: [{
@@ -247,7 +270,7 @@ app.post("/profile/update", requireAuth, async (req, res) => {
     const existing = doc.data();
 
     // Use Gemini to merge the update into existing dossier
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.0-flash" });
     const result = await model.generateContent(`
 Existing dossier summary: ${existing.structured.summary}
 New update from user: "${update}"

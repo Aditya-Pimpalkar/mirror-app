@@ -121,7 +121,7 @@ async function generateMemorySummary(keyMoments, personaId) {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-1.5-pro",
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
       generationConfig: { maxOutputTokens: 300, temperature: 0.3 },
     });
 
