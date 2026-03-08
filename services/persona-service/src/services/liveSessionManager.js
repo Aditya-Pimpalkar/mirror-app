@@ -249,8 +249,7 @@ async function handleClientMessage(sessionId, msg) {
     case "audio_input": {
       if (geminiWs.readyState !== WebSocket.OPEN) return;
       if (!session.isReady) return;
-      session._hasReceivedAudio = true;
-      geminiWs.send(JSON.stringify({
+geminiWs.send(JSON.stringify({
         realtime_input: {
           media_chunks: [{
             mime_type: "audio/pcm;rate=16000",
@@ -261,14 +260,7 @@ async function handleClientMessage(sessionId, msg) {
       break;
     }
 
-    case "mic_stopped": {
-      // User stopped mic — add a placeholder user bubble
-      if (session._hasReceivedAudio) {
-        session._hasReceivedAudio = false;
-        safeSend(clientWs, { type: "user_speaking_done" });
-      }
-      break;
-    }
+
 
     // ── Text message (fallback for non-voice) ──
     case "text_input": {

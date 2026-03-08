@@ -64,8 +64,7 @@ export default function Chat() {
     },
     onBeliefUpdate: (update) => { if (update?.belief) updateBelief(activePersonaId, update.belief); },
     onSessionReady: () => {
-      console.log("[Chat] Live session ready — auto-starting mic");
-      setTimeout(() => startLive(), 500);
+      console.log("[Chat] Live session ready");
     },
     onError: (err) => { console.error("[Chat] Live error:", err); },
   });

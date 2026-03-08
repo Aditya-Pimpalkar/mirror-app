@@ -51,8 +51,14 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
           } else if (msg.type === "persona_transcript") {
             onMessage?.({ type: "persona_transcript", text: msg.text, isFinal: msg.isFinal });
           } else if (msg.type === "interrupted") {
+            // Stop all audio immediately
+            audioQueueRef.current = [];
+            isPlayingRef.current = false;
             setIsSpeaking(false);
-            stopAudio();
+            if (audioContextRef.current) {
+              try { audioContextRef.current.suspend(); } catch {}
+              audioContextRef.current = null;
+            }
             onMessage?.({ type: "interrupted" });
           } else if (msg.type === "session_closed") {
             setIsConnected(false);
@@ -119,8 +125,13 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
   const stopAudio = useCallback(() => {
     audioQueueRef.current = [];
     isPlayingRef.current = false;
-    try { audioContextRef.current?.close(); } catch {}
-    audioContextRef.current = null;
+    setIsSpeaking(false);
+    // Suspend immediately to cut audio — faster than close
+    if (audioContextRef.current) {
+      try { audioContextRef.current.suspend(); } catch {}
+      // Recreate context for next playback
+      audioContextRef.current = null;
+    }
   }, []);
 
   // ── Mic capture (PCM16 @ 16kHz) ──────────────────────────────────────────
@@ -143,7 +154,7 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
       const source = micCtx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      const processor = micCtx.createScriptProcessor(2048, 1, 1);
+      const processor = micCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
@@ -191,10 +202,6 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
 
   const stopListening = useCallback(() => {
     stopMic();
-    // Signal to server that mic stopped
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "mic_stopped" }));
-    }
     console.log("[Live] Mic stopped");
   }, [stopMic]);
 
