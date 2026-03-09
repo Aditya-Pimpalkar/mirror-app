@@ -176,20 +176,16 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
           }
         }
 
-        if (turnComplete && session._currentResponseText) {
-          // Persona finished speaking — log the full turn
-          const fullResponse = session._currentResponseText;
+        if (turnComplete) {
+          const fullResponse = session._currentResponseText || "";
           session._currentResponseText = "";
-
-          session.messages.push({ role: "assistant", content: fullResponse, timestamp: new Date().toISOString() });
-
-          safeSend(clientWs, {
-            type: "turn_complete",
-            text: fullResponse,
-            belief: session.currentBelief,
-          });
-
-          console.log(`[LiveSession:${sessionId}] Turn complete, belief: ${session.currentBelief}`);
+          const belief = session.currentBelief;
+          // Track turn count
+          session._turnCount = (session._turnCount || 0) + 1;
+          console.log(`[LiveSession:${sessionId}] Turn complete #${session._turnCount}, belief: ${belief}`);
+          // Just notify client — no per-turn summary (avoids duplicates)
+          // Transcripts will show when user ends session
+          safeSend(clientWs, { type: "turn_complete", text: fullResponse || null, belief });
         }
       }
 
@@ -226,8 +222,51 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
     }
   });
 
-  clientWs.on("close", () => {
-    console.log(`[LiveSession:${sessionId}] Client disconnected`);
+  clientWs.on("close", async () => {
+    console.log(`[LiveSession:${sessionId}] Client disconnected — generating summary`);
+    
+    // Generate summary when client disconnects
+    try {
+      const { GoogleGenerativeAI } = require("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+        generationConfig: { maxOutputTokens: 600, temperature: 0.2 },
+      });
+
+      const turnCount = session._turnCount || 0;
+      const persona = PERSONAS[session.personaId];
+      const allMessages = session.messages || [];
+      const userMsgs = allMessages.filter(m => m.role === "user").map(m => m.content).join(" | ");
+
+      if (turnCount > 0 && allMessages.length > 0) {
+        const result = await model.generateContent(
+          `You are ${persona?.name || session.personaId}, a ${persona?.role || "persona"}.
+You just had a ${turnCount}-turn voice conversation with ${session.userName}.
+${userMsgs ? `They said: "${userMsgs.slice(0, 300)}"` : "No user messages recorded."}
+
+Write 2-3 sentences summarizing this conversation from your perspective.
+What were your key observations? What challenged or interested you?
+Be specific and stay in character. No preamble.`
+        );
+
+        const summary = result.response.text().trim();
+        console.log(`[LiveSession:${sessionId}] Summary generated: ${summary.slice(0, 80)}`);
+        
+        // Store summary in Firestore for frontend to fetch
+        const db = getFirestore();
+        await db.collection("users").doc(session.userId)
+          .collection("personas").doc(session.personaId)
+          .collection("voice_summaries").add({
+            summary,
+            turns: turnCount,
+            sessionId,
+            createdAt: new Date().toISOString(),
+          });
+      }
+    } catch (err) {
+      console.error("[Summary]", err.message);
+    }
     persistSession(sessionId);
     cleanupSession(sessionId);
   });
@@ -266,6 +305,8 @@ geminiWs.send(JSON.stringify({
     case "text_input": {
       if (!msg.text?.trim()) return;
       if (geminiWs.readyState !== WebSocket.OPEN) return;
+      // Track user message
+      session.messages.push({ role: "user", content: msg.text.trim(), timestamp: new Date().toISOString() });
 
       // Score the message for evidence/pushback
       const score = scoreMessage(session.personaId, msg.text);

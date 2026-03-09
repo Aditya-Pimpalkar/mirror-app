@@ -61,6 +61,8 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
               audioContextRef.current = null;
             }
             onMessage?.({ type: "interrupted" });
+          } else if (msg.type === "session_summary") {
+            onMessage?.({ type: "session_summary", text: msg.summary, turns: msg.turns });
           } else if (msg.type === "session_closed") {
             setIsConnected(false);
           } else if (msg.type === "error") {
@@ -224,10 +226,17 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
     stopAudio();
     if (wsRef.current) {
       try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
-      wsRef.current.close();
-      wsRef.current = null;
+      // Wait 3s for session_summary before closing
+      setTimeout(() => {
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+        }
+        setIsConnected(false);
+      }, 3000);
+    } else {
+      setIsConnected(false);
     }
-    setIsConnected(false);
   }, [stopMic, stopAudio]);
 
   useEffect(() => () => disconnect(), []);

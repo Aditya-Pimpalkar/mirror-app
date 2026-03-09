@@ -225,3 +225,22 @@ router.get("/all-status", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch all statuses" });
   }
 });
+
+// ─── GET /personas/:personaId/voice-summaries ─────────────────────────────────
+router.get("/:personaId/voice-summaries", requireAuth, async (req, res) => {
+  const { personaId } = req.params;
+  const userId = req.user.uid;
+  try {
+    const db = getFirestore();
+    const snap = await db.collection("users").doc(userId)
+      .collection("personas").doc(personaId)
+      .collection("voice_summaries")
+      .orderBy("createdAt", "desc")
+      .limit(5)
+      .get();
+    const summaries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ summaries });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch voice summaries" });
+  }
+});

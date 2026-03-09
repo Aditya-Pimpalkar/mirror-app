@@ -22,6 +22,8 @@ export default function Chat() {
   const [streamingText, setStreamingText] = useState("");
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
+  const summariesLoadedRef = useRef(false);
+  const openingAddedRef = useRef(false);
 
   const belief = beliefs[activePersonaId] || persona?.initialBelief || 20;
 
@@ -29,9 +31,44 @@ export default function Chat() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, isLoading]);
 
-  // Opening message
+  // Load voice summaries from Firestore
   useEffect(() => {
-    if (!persona || messages.length > 0) return;
+    if (!persona) return;
+    if (summariesLoadedRef.current) return;
+    summariesLoadedRef.current = true;
+    const loadVoiceSummaries = async () => {
+      try {
+        const { getIdToken } = await import("../../lib/firebase.js");
+        const token = await getIdToken();
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_PERSONA_SERVICE_URL}/personas/${activePersonaId}/voice-summaries`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        data.summaries?.forEach(s => {
+          const exists = messages.some(m => m.voiceSummaryId === s.id);
+          if (!exists && s.summary) {
+            addMessage(activePersonaId, {
+              role: "assistant",
+              content: `🎙️ Voice session (${s.turns} turns)\n\n${s.summary}`,
+              timestamp: s.createdAt,
+              source: "voice_summary",
+              voiceSummaryId: s.id,
+            });
+          }
+        });
+      } catch {}
+    };
+    loadVoiceSummaries();
+  }, [activePersonaId]);
+
+  // Opening message — only once
+  useEffect(() => {
+    if (!persona || openingAddedRef.current) return;
+    const realMessages = (conversations[activePersonaId] || []).filter(m => !m.source?.includes("voice"));
+    if (realMessages.length > 0) return;
+    openingAddedRef.current = true;
     const firstName = profile?.userName?.split(" ")[0] || "you";
     const opening = {
       recruiter: `I've looked you over, ${firstName}. Your trajectory raises some questions. Let's start with the gaps.`,
@@ -58,6 +95,15 @@ export default function Chat() {
       } else if (msg.type === "persona_transcript" && msg.isFinal && msg.text?.trim()) {
         addMessage(activePersonaId, { role: "assistant", content: msg.text, timestamp: new Date().toISOString(), source: "voice" });
         setStreamingText("");
+      } else if (msg.type === "session_summary") {
+        if (msg.text?.trim()) {
+          addMessage(activePersonaId, {
+            role: "assistant",
+            content: `[Voice session — ${msg.turns} turns]\n\n${msg.text}`,
+            timestamp: new Date().toISOString(),
+            source: "voice_summary"
+          });
+        }
       } else if (msg.type === "interrupted") {
         setStreamingText("");
       }
@@ -117,10 +163,11 @@ export default function Chat() {
     setIsLoading(false);
   };
 
-  const endConversation = () => {
+  const endConversation = async () => {
     disconnect();
     markPersonaComplete(activePersonaId);
-    setScreen("home");
+    // Wait for summary to generate then go home
+    setTimeout(() => setScreen("home"), 3500);
   };
 
   if (!persona) { setScreen("home"); return null; }
