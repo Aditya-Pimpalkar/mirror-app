@@ -24,6 +24,7 @@ export default function Home() {
   } = useMirrorStore();
 
   const [loading, setLoading] = useState(true);
+  const [serviceError, setServiceError] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -52,6 +53,7 @@ export default function Home() {
         );
       } catch (err) {
         console.error("[Home] Load error:", err.message);
+        setServiceError(true);
       }
       setLoading(false);
     }
@@ -67,6 +69,11 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: "100vh", padding: "52px 24px 100px" }}>
+      {serviceError && (
+        <div style={{ padding: "10px 16px", background: "rgba(232,112,112,0.08)", border: "1px solid rgba(232,112,112,0.2)", borderRadius: 10, marginBottom: 16, fontFamily: "var(--font-mono)", fontSize: 10, color: "#E87070", letterSpacing: "0.05em" }}>
+          ⚠ Some services offline — start them locally to continue
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
@@ -270,14 +277,23 @@ export default function Home() {
         {completedPersonas.length > 0 && (
           <button
             onClick={() => setScreen("timeline")}
-            style={{
-              padding: "13px", background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14,
-              color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-mono)", fontSize: 11,
-              letterSpacing: "0.15em",
-            }}
+            style={{ padding: "13px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
           >
             VIEW REPUTATION TIMELINE →
+          </button>
+        )}
+        {completedPersonas.length >= 2 && (
+          <button
+            onClick={async () => {
+              try {
+                const { generateWeeklyReport } = await import("../lib/api.js");
+                await generateWeeklyReport();
+                alert("Weekly report generated! Check your timeline.");
+              } catch { alert("Failed to generate report."); }
+            }}
+            style={{ padding: "13px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
+          >
+            📊 GENERATE WEEKLY REPORT
           </button>
         )}
       </div>

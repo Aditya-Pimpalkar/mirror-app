@@ -77,10 +77,15 @@ export default function App() {
 
   if (!authReady) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", maxWidth: 480, margin: "0 auto" }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🪞</div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.5em", color: "var(--gold)" }}>MIRROR</div>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", maxWidth: 480, margin: "0 auto", background: "var(--bg)" }}>
+        <div style={{ textAlign: "center", animation: "fadeIn 0.6s ease" }}>
+          <div style={{ fontSize: 52, marginBottom: 20, animation: "pulse 2s infinite" }}>🪞</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.6em", color: "var(--gold)", marginBottom: 24 }}>MIRROR</div>
+          <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--gold)", animation: `pulse 1.2s ${i * 0.2}s infinite` }} />
+            ))}
+          </div>
         </div>
       </div>
     );

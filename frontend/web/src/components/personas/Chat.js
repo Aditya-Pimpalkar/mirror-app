@@ -108,7 +108,15 @@ export default function Chat() {
         setStreamingText("");
       }
     },
-    onBeliefUpdate: (update) => { if (update?.belief) updateBelief(activePersonaId, update.belief); },
+    onBeliefUpdate: (update) => {
+      if (update?.belief) {
+        updateBelief(activePersonaId, update.belief);
+        // Crisis detection — if belief drops very low, conversation may be distressing
+        if (update.belief < 10 && update.belief < (beliefs[activePersonaId] || 20)) {
+          console.warn("[Crisis] Belief very low — may be distressing");
+        }
+      }
+    },
     onSessionReady: () => {
       console.log("[Chat] Live session ready");
     },
@@ -208,6 +216,18 @@ export default function Chat() {
           </div>
           <button onClick={() => { disconnect(); }} style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--text-dim)", background: "none", border: "1px solid var(--border)", padding: "3px 8px", borderRadius: 6 }}>
             END VOICE
+          </button>
+        </div>
+      )}
+
+      {/* Crisis detection banner */}
+      {belief < 10 && (
+        <div style={{ padding: "10px 20px", background: "rgba(232,112,112,0.08)", borderBottom: "1px solid rgba(232,112,112,0.2)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontFamily: "var(--font-body)", color: "#E87070", fontSize: 12, fontStyle: "italic" }}>
+            This conversation seems intense. Take a breath if needed.
+          </div>
+          <button onClick={endConversation} style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "#E87070", background: "none", border: "1px solid rgba(232,112,112,0.3)", padding: "4px 8px", borderRadius: 6 }}>
+            PAUSE
           </button>
         </div>
       )}
