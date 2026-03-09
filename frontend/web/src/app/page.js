@@ -15,6 +15,7 @@ import ScenarioPrep from "../components/ScenarioPrep";
 import WeeklyReport from "../components/WeeklyReport";
 import Settings from "../components/Settings";
 import HonestLetter from "../components/HonestLetter";
+import MeetVoices from "../components/MeetVoices";
 
 async function loadAllPersonaState(token, store) {
   try {
@@ -107,6 +108,7 @@ export default function App() {
       {screen === "scenario"      && <ScenarioPrep />}
       {screen === "report"        && <WeeklyReport />}
       {screen === "settings"      && <Settings />}
+      {screen === "meet"          && <MeetVoices />}
       {screen === "letter"        && <HonestLetter />}
     </main>
   );
