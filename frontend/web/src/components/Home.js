@@ -290,20 +290,7 @@ export default function Home() {
             VIEW REPUTATION TIMELINE →
           </button>
         )}
-        {completedPersonas.length >= 2 && (
-          <button
-            onClick={async () => {
-              try {
-                const { generateWeeklyReport } = await import("../lib/api.js");
-                await generateWeeklyReport();
-                alert("Weekly report generated! Check your timeline.");
-              } catch { alert("Failed to generate report."); }
-            }}
-            style={{ padding: "13px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
-          >
-            📊 GENERATE WEEKLY REPORT
-          </button>
-        )}
+
       </div>
     </div>
   );
