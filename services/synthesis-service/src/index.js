@@ -306,7 +306,7 @@ app.post("/synthesis/weekly-report", async (req, res) => {
     // Generate report with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 2000, temperature: 0.75 },
+      generationConfig: { maxOutputTokens: 2000, temperature: 0.75, responseMimeType: "application/json" },
     });
 
     const result = await model.generateContent(`
@@ -481,3 +481,49 @@ app.listen(PORT, () => {
 });
 
 process.on("SIGTERM", () => { process.exit(0); });
+
+/**
+ * POST /synthesis/honest-letter
+ * Generates a letter from all 4 personas to the user
+ */
+app.post("/synthesis/honest-letter", requireAuth, async (req, res) => {
+  const userId = req.user.uid;
+  try {
+    const profileDoc = await db.collection("users").doc(userId).collection("profile").doc("dossier").get();
+    if (!profileDoc.exists) return res.status(400).json({ error: "No profile found" });
+    const profile = profileDoc.data();
+
+    // Get latest perception map for context
+    const reports = await db.collection("users").doc(userId).collection("reports")
+      .orderBy("generatedAt", "desc").limit(1).get();
+    const latestReport = reports.empty ? null : reports.docs[0].data();
+
+    const model = genAI.getGenerativeModel({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      generationConfig: { maxOutputTokens: 1000, temperature: 0.8 },
+    });
+
+    const result = await model.generateContent(`
+You are writing a letter jointly from 4 AI personas (Rachel the recruiter, Alex the first date, Chris the competitor, Jordan the journalist) to ${profile.userName}.
+
+About this person: ${profile.structured?.summary || profile.rawBio?.slice(0, 300)}
+${latestReport?.headline ? `Their reputation headline: ${latestReport.headline}` : ""}
+${latestReport?.gap ? `Key gap identified: ${latestReport.gap}` : ""}
+
+Write a 4-6 paragraph honest letter that:
+- Opens with "Dear ${profile.userName},"
+- Synthesizes what all 4 perspectives have noticed about this person
+- Names something specific they consistently revealed
+- Identifies the gap between their self-perception and how others see them
+- Ends with a genuine challenge or question for them to sit with
+- Signs off from all 4: "With full attention, Rachel, Alex, Chris & Jordan — Mirror"
+
+Be honest, warm but direct. This is not a performance review — it's a letter from people who have been paying close attention.`);
+
+    const letter = result.response.text().trim();
+    res.json({ letter });
+  } catch (err) {
+    console.error("[honest-letter]", err.message);
+    res.status(500).json({ error: "Failed to generate letter" });
+  }
+});

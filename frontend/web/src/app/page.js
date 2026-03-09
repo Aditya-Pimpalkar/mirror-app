@@ -13,6 +13,8 @@ import Confrontation from "../components/confrontation/Confrontation";
 import Archetype from "../components/Archetype";
 import ScenarioPrep from "../components/ScenarioPrep";
 import WeeklyReport from "../components/WeeklyReport";
+import Settings from "../components/Settings";
+import HonestLetter from "../components/HonestLetter";
 
 async function loadAllPersonaState(token, store) {
   try {
@@ -104,6 +106,8 @@ export default function App() {
       {screen === "archetype"     && <Archetype />}
       {screen === "scenario"      && <ScenarioPrep />}
       {screen === "report"        && <WeeklyReport />}
+      {screen === "settings"      && <Settings />}
+      {screen === "letter"        && <HonestLetter />}
     </main>
   );
 }

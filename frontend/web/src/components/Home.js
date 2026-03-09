@@ -76,7 +76,8 @@ export default function Home() {
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 32, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
         <div className="label" style={{ color: "var(--gold)", marginBottom: 8 }}>🪞 MIRROR</div>
         <h2 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--text)", margin: "0 0 4px" }}>
           Hello, {firstName}.
@@ -86,6 +87,8 @@ export default function Home() {
             ? "Your mirror is waiting."
             : `${completedPersonas.length} of 4 perspectives heard.`}
         </p>
+        </div>
+        <button onClick={() => setScreen("settings")} style={{ padding: "8px", background: "none", border: "none", color: "var(--text-muted)", fontSize: 18, marginTop: 4 }}>⚙️</button>
       </div>
 
       {/* Gap Score */}
@@ -261,6 +264,14 @@ export default function Home() {
           </div>
           <span style={{ marginLeft: "auto", color: "rgba(107,163,214,0.5)", fontSize: 18 }}>→</span>
         </button>
+        {completedPersonas.length >= 4 && (
+          <button
+            onClick={() => setScreen("letter")}
+            style={{ padding: "14px", background: "rgba(212,168,83,0.06)", border: "1px solid rgba(212,168,83,0.2)", borderRadius: 14, color: "var(--gold)", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
+          >
+            ✉️ THE HONEST LETTER — ALL 4 VOICES WRITE TO YOU
+          </button>
+        )}
         {completedPersonas.length >= 2 && (
           <button
             onClick={() => setScreen("confrontation")}
