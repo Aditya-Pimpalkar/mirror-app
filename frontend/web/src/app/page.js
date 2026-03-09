@@ -12,7 +12,6 @@ import Timeline from "../components/Timeline";
 import Confrontation from "../components/confrontation/Confrontation";
 import Archetype from "../components/Archetype";
 import ScenarioPrep from "../components/ScenarioPrep";
-import WeeklyReport from "../components/WeeklyReport";
 
 async function loadAllPersonaState(token, store) {
   try {
@@ -103,7 +102,6 @@ export default function App() {
       {screen === "confrontation" && <Confrontation />}
       {screen === "archetype"     && <Archetype />}
       {screen === "scenario"      && <ScenarioPrep />}
-      {screen === "report"        && <WeeklyReport />}
     </main>
   );
 }
