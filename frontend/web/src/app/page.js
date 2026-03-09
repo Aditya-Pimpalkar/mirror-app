@@ -11,6 +11,7 @@ import PerceptionMap from "../components/map/PerceptionMap";
 import Timeline from "../components/Timeline";
 import Confrontation from "../components/confrontation/Confrontation";
 import Archetype from "../components/Archetype";
+import ScenarioPrep from "../components/ScenarioPrep";
 
 async function loadAllPersonaState(token, store) {
   try {
@@ -95,6 +96,7 @@ export default function App() {
       {screen === "timeline"      && <Timeline />}
       {screen === "confrontation" && <Confrontation />}
       {screen === "archetype"     && <Archetype />}
+      {screen === "scenario"      && <ScenarioPrep />}
     </main>
   );
 }

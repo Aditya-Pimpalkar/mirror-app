@@ -204,6 +204,12 @@ export default function Home() {
 
       {/* Action buttons */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button
+          onClick={() => setScreen("scenario")}
+          style={{ padding: "14px", background: "rgba(107,163,214,0.06)", border: "1px solid rgba(107,163,214,0.2)", borderRadius: 14, color: "#6BA3D6", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
+        >
+          🎯 SCENARIO PREP — REHEARSE HIGH-STAKES MOMENTS
+        </button>
         {completedPersonas.length >= 2 && (
           <button
             onClick={() => setScreen("confrontation")}

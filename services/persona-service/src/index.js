@@ -20,6 +20,7 @@ const { initFirebase, getFirestore } = require("./utils/firebase");
 const { verifyWsToken } = require("./middleware/auth");
 const { createLiveSession, getActiveSessionCount } = require("./services/liveSessionManager");
 const personaRoutes = require("./routes/persona");
+const scenarioRoutes = require("./routes/scenarios");
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,7 @@ app.get("/health", (req, res) => {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 app.use("/personas", personaRoutes);
+app.use("/scenarios", scenarioRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
