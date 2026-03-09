@@ -4,6 +4,7 @@ import { useMirrorStore } from "../../store";
 import { streamChat } from "../../lib/api";
 import { useGeminiLive } from "../../hooks/useGeminiLive";
 import { BeliefBar, PersonaAvatar, LoadingDots, PERSONAS } from "../ui";
+import ShareVerdict from "../ShareVerdict";
 
 export default function Chat() {
   const {
@@ -20,6 +21,7 @@ export default function Chat() {
   const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [shareVerdict, setShareVerdict] = useState(null); // { quote, personaId }
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const summariesLoadedRef = useRef(false);
@@ -235,7 +237,7 @@ export default function Chat() {
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
         {messages.map((msg, i) => (
-          <ChatBubble key={i} msg={msg} persona={persona} />
+          <ChatBubble key={i} msg={msg} persona={persona} onShare={(q) => setShareVerdict(q)} />
         ))}
         {streamingText && <ChatBubble msg={{ role: "assistant", content: streamingText }} persona={persona} streaming />}
         {isLoading && !streamingText && (
@@ -285,29 +287,46 @@ export default function Chat() {
           />
         )}
       </div>
+      {/* Share Verdict modal */}
+      {shareVerdict && (
+        <ShareVerdict
+          personaId={activePersonaId}
+          quote={shareVerdict}
+          onClose={() => setShareVerdict(null)}
+        />
+      )}
     </div>
   );
 }
 
-function ChatBubble({ msg, persona, streaming }) {
+function ChatBubble({ msg, persona, streaming, onShare }) {
   const isUser = msg.role === "user";
   return (
     <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 14, animation: "fadeUp 0.3s ease" }}>
       {!isUser && <PersonaAvatar persona={persona} size={30} style={{ marginRight: 8, marginTop: 2, flexShrink: 0 }} />}
-      <div style={{
-        maxWidth: "78%", padding: "11px 15px",
-        background: isUser ? "rgba(255,255,255,0.06)" : persona.bg,
-        border: `1px solid ${isUser ? "rgba(255,255,255,0.1)" : persona.border}`,
-        borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-        fontSize: 14, lineHeight: 1.65,
-        color: isUser ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.88)",
-        fontFamily: "var(--font-body)", fontStyle: isUser ? "normal" : "italic",
-        marginLeft: isUser ? 0 : 8,
-      }}>
-        {msg.content}
-        {streaming && <span style={{ animation: "pulse 1s infinite", display: "inline", color: persona.color }}>▋</span>}
-        {msg.source === "voice" && (
-          <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em" }}>VOICE</div>
+      <div style={{ maxWidth: "78%", marginLeft: isUser ? 0 : 8 }}>
+        <div style={{
+          padding: "11px 15px",
+          background: isUser ? "rgba(255,255,255,0.06)" : persona.bg,
+          border: `1px solid ${isUser ? "rgba(255,255,255,0.1)" : persona.border}`,
+          borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+          fontSize: 14, lineHeight: 1.65,
+          color: isUser ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.88)",
+          fontFamily: "var(--font-body)", fontStyle: isUser ? "normal" : "italic",
+        }}>
+          {msg.content}
+          {streaming && <span style={{ animation: "pulse 1s infinite", display: "inline", color: persona.color }}>▋</span>}
+          {msg.source === "voice" && (
+            <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em" }}>VOICE</div>
+          )}
+        </div>
+        {!isUser && !streaming && onShare && msg.content?.length > 30 && (
+          <button
+            onClick={() => onShare(msg.content)}
+            style={{ marginTop: 4, padding: "3px 10px", background: "none", border: "none", fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em", cursor: "pointer" }}
+          >
+            ↗ SHARE VERDICT
+          </button>
         )}
       </div>
     </div>

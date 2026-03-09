@@ -500,7 +500,7 @@ app.post("/synthesis/honest-letter", requireAuth, async (req, res) => {
 
     const model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 1000, temperature: 0.8 },
+      generationConfig: { maxOutputTokens: 3000, temperature: 0.8 },
     });
 
     const result = await model.generateContent(`
@@ -510,7 +510,7 @@ About this person: ${profile.structured?.summary || profile.rawBio?.slice(0, 300
 ${latestReport?.headline ? `Their reputation headline: ${latestReport.headline}` : ""}
 ${latestReport?.gap ? `Key gap identified: ${latestReport.gap}` : ""}
 
-Write a 4-6 paragraph honest letter that:
+Write a SHORT 3-4 paragraph letter (max 250 words total) that:
 - Opens with "Dear ${profile.userName},"
 - Synthesizes what all 4 perspectives have noticed about this person
 - Names something specific they consistently revealed
