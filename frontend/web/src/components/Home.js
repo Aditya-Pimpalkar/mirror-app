@@ -274,6 +274,14 @@ export default function Home() {
             ⚡ CONFRONTATION MODE — ALL 4 AT ONCE
           </button>
         )}
+        {completedPersonas.length >= 2 && (
+          <button
+            onClick={() => setScreen("report")}
+            style={{ padding: "13px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
+          >
+            📊 WEEKLY REPUTATION REPORT
+          </button>
+        )}
         {completedPersonas.length > 0 && (
           <button
             onClick={() => setScreen("timeline")}
