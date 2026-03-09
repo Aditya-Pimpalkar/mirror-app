@@ -20,6 +20,7 @@ export default function Home() {
     profile, beliefs, completedPersonas, gapScore,
     setGapScore, setMirrorMoment, mirrorMoment,
     setArchetype, archetype, setScreen, setActivePersona, updateBelief,
+    streaks,
   } = useMirrorStore();
 
   const [loading, setLoading] = useState(true);
@@ -202,13 +203,56 @@ export default function Home() {
         })}
       </div>
 
+      {/* Conviction Streaks */}
+      {Object.values(streaks).some(s => s > 0) && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="label" style={{ marginBottom: 14 }}>CONVICTION STREAKS</div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            {Object.values(PERSONAS).map((p) => {
+              const streak = streaks[p.id] || 0;
+              return (
+                <div key={p.id} style={{ textAlign: "center", opacity: streak > 0 ? 1 : 0.3 }}>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>{p.emoji}</div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: p.color, letterSpacing: "0.08em", marginBottom: 4 }}>{p.name.toUpperCase()}</div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, color: streak > 0 ? p.color : "var(--text-dim)", lineHeight: 1 }}>
+                    {streak}
+                  </div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "var(--text-dim)", letterSpacing: "0.1em", marginTop: 2 }}>
+                    {streak === 1 ? "DAY" : "DAYS"}
+                  </div>
+                  <div style={{ fontSize: 11, marginTop: 4, minHeight: 14 }}>
+                    {streak >= 7 ? "🔥🔥" : streak >= 3 ? "🔥" : ""}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {Math.max(...Object.values(streaks)) >= 3 && (
+            <div style={{ marginTop: 12, textAlign: "center", fontFamily: "var(--font-body)", color: "var(--text-muted)", fontSize: 12, fontStyle: "italic" }}>
+              {Math.max(...Object.values(streaks)) >= 7 ? "🔥 On fire. The personas are noticing." : "Keep going. Consistency shifts belief."}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Action buttons */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <button
           onClick={() => setScreen("scenario")}
-          style={{ padding: "14px", background: "rgba(107,163,214,0.06)", border: "1px solid rgba(107,163,214,0.2)", borderRadius: 14, color: "#6BA3D6", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.15em" }}
+          style={{
+            padding: "18px 20px", textAlign: "left",
+            background: "linear-gradient(135deg, rgba(107,163,214,0.12), rgba(107,163,214,0.06))",
+            border: "1px solid rgba(107,163,214,0.35)",
+            borderRadius: 16, width: "100%",
+            display: "flex", alignItems: "center", gap: 14,
+          }}
         >
-          🎯 SCENARIO PREP — REHEARSE HIGH-STAKES MOMENTS
+          <span style={{ fontSize: 28, flexShrink: 0 }}>🎯</span>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#6BA3D6", letterSpacing: "0.15em", marginBottom: 4 }}>SCENARIO PREP</div>
+            <div style={{ fontFamily: "var(--font-body)", color: "rgba(255,255,255,0.5)", fontSize: 12, fontStyle: "italic" }}>Rehearse high-stakes moments before they happen</div>
+          </div>
+          <span style={{ marginLeft: "auto", color: "rgba(107,163,214,0.5)", fontSize: 18 }}>→</span>
         </button>
         {completedPersonas.length >= 2 && (
           <button
@@ -227,9 +271,9 @@ export default function Home() {
           <button
             onClick={() => setScreen("timeline")}
             style={{
-              padding: "13px", background: "none",
-              border: "1px solid var(--border)", borderRadius: 14,
-              color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11,
+              padding: "13px", background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14,
+              color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-mono)", fontSize: 11,
               letterSpacing: "0.15em",
             }}
           >

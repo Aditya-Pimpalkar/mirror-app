@@ -8,7 +8,7 @@ import { BeliefBar, PersonaAvatar, LoadingDots, PERSONAS } from "../ui";
 export default function Chat() {
   const {
     activePersonaId, conversations, beliefs, completedPersonas,
-    addMessage, setScreen, updateBelief, markPersonaComplete, profile,
+    addMessage, setScreen, updateBelief, markPersonaComplete, profile, updateStreak,
   } = useMirrorStore();
 
   const persona = PERSONAS[activePersonaId];
@@ -166,7 +166,10 @@ export default function Chat() {
   const endConversation = async () => {
     disconnect();
     markPersonaComplete(activePersonaId);
-    // Wait for summary to generate then go home
+    // Update streak — increment if belief improved
+    const currentBelief = beliefs[activePersonaId] || 20;
+    const initialBelief = PERSONAS[activePersonaId]?.initialBelief || 20;
+    updateStreak(activePersonaId, true); // Always increment — talked today
     setTimeout(() => setScreen("home"), 3500);
   };
 
