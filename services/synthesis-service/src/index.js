@@ -162,7 +162,7 @@ app.post("/synthesis/perception-map", requireAuth, async (req, res) => {
     // Generate with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 2000, temperature: 0.7, responseMimeType: "application/json" },
+      generationConfig: { maxOutputTokens: 2000, temperature: 0.2, responseMimeType: "application/json" },
     });
 
     const prompt = `Generate a Perception Map for ${profile.userName}.
@@ -194,7 +194,10 @@ Return ONLY valid JSON:
 }`;
 
     const result = await model.generateContent(prompt);
-    const mapData = JSON.parse(result.response.text().replace(/```json|```/g, "").trim());
+    const rawMap = result.response.text().replace(/```json|```/g, "").trim();
+    // Fix unescaped quotes inside JSON string values
+    let fixedMap = rawMap.replace(/,\s*([}\]])/g, "$1");
+    const mapData = JSON.parse(fixedMap);
 
     // Attach full archetype details
     const archetype = ARCHETYPES[mapData.archetype_id] || ARCHETYPES.vault;

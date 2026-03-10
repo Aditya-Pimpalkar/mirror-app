@@ -80,7 +80,7 @@ export default function Onboarding() {
     try {
       const result = await onboardUser({ bio: content, userName: name.trim(), publicLinks });
       setProfile({ userName: name.trim(), summary: result.dossierPreview, publicLinks });
-      setScreen("meet");
+      setScreen("tour");
     } catch (err) {
       setError("Something went wrong. Please try again.");
       setStep(2);

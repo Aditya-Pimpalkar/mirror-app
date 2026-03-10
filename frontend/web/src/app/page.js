@@ -16,6 +16,7 @@ import WeeklyReport from "../components/WeeklyReport";
 import Settings from "../components/Settings";
 import HonestLetter from "../components/HonestLetter";
 import MeetVoices from "../components/MeetVoices";
+import FeatureTour from "../components/FeatureTour";
 
 async function loadAllPersonaState(token, store) {
   try {
@@ -109,6 +110,7 @@ export default function App() {
       {screen === "report"        && <WeeklyReport />}
       {screen === "settings"      && <Settings />}
       {screen === "meet"          && <MeetVoices />}
+      {screen === "tour"          && <FeatureTour />}
       {screen === "letter"        && <HonestLetter />}
     </main>
   );

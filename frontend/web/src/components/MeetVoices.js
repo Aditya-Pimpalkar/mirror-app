@@ -121,7 +121,7 @@ export default function MeetVoices() {
             boxShadow: `0 0 20px ${persona.color}33`,
           }}
         >
-          {isLast ? `MEET YOUR MIRROR, ${firstName.toUpperCase()} →` : `NEXT: ${PERSONAS[current + 1].name.toUpperCase()} →`}
+          {isLast ? `LET'S BEGIN, ${firstName.toUpperCase()} →` : `NEXT: ${PERSONAS[current + 1].name.toUpperCase()} →`}
         </button>
         {!isLast && (
           <button onClick={() => setScreen("home")} style={{ width: "100%", padding: "10px", background: "none", border: "none", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-dim)", letterSpacing: "0.1em" }}>
