@@ -404,6 +404,7 @@ app.get("/profile", requireAuth, async (req, res) => {
     res.json({
       exists: true,
       userName: data.userName,
+      rawBio: data.rawBio,
       summary: data.structured?.summary,
       publicLinks: data.publicLinks,
       version: data.version,
