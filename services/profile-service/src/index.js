@@ -135,24 +135,117 @@ Return this exact JSON:
  */
 async function scrapeUrl(url) {
   try {
-    // Use Gemini to analyze the URL content directly
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
+    const fetch = require("node-fetch");
+    const cheerio = require("cheerio");
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.toLowerCase();
 
-    const result = await model.generateContent({
-      contents: [{
-        role: "user",
-        parts: [
-          { text: `Extract the key professional/personal information from this URL that would be useful for understanding who this person is. Be factual. URL: ${url}\n\nIf you cannot access this URL, say "URL_INACCESSIBLE".` },
-        ],
-      }],
-    });
-
-    const text = result.response.text();
-    if (text.includes("URL_INACCESSIBLE")) {
-      return { source: url, content: null, error: "inaccessible" };
+    // LinkedIn requires auth — skip gracefully
+    if (hostname.includes("linkedin.com")) {
+      console.log(`[scrapeUrl] LinkedIn skipped (requires auth): ${url}`);
+      return { source: url, content: null, error: "linkedin_requires_auth" };
     }
 
-    return { source: url, content: text.slice(0, 2000), error: null };
+    // GitHub — use API for rich data
+    if (hostname.includes("github.com")) {
+      const parts = urlObj.pathname.split("/").filter(Boolean);
+      const username = parts[0];
+      if (username) {
+        try {
+          const [userRes, reposRes] = await Promise.all([
+            fetch(`https://api.github.com/users/${username}`, { headers: { "User-Agent": "Mirror-App/1.0" } }),
+            fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=6`, { headers: { "User-Agent": "Mirror-App/1.0" } }),
+          ]);
+          const user = await userRes.json();
+          const repos = await reposRes.json();
+          
+          const repoList = Array.isArray(repos) ? repos.map(r => `${r.name} (${r.language || "?"}, ⭐${r.stargazers_count}): ${r.description || ""}`).join("\n") : "";
+          
+          const content = [
+            user.name ? `Name: ${user.name}` : "",
+            user.bio ? `Bio: ${user.bio}` : "",
+            user.company ? `Company: ${user.company}` : "",
+            user.location ? `Location: ${user.location}` : "",
+            user.public_repos ? `Public repos: ${user.public_repos}` : "",
+            user.followers ? `Followers: ${user.followers}` : "",
+            repoList ? `Recent repos:\n${repoList}` : "",
+          ].filter(Boolean).join("\n");
+
+          console.log(`[scrapeUrl] GitHub scraped: ${username}`);
+          return { source: url, content: content.slice(0, 2000), error: null };
+        } catch (e) {
+          console.error(`[scrapeUrl] GitHub API failed:`, e.message);
+        }
+      }
+    }
+
+    // Medium — fetch and parse HTML
+    if (hostname.includes("medium.com")) {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)",
+          "Accept": "text/html",
+        },
+        timeout: 8000,
+      });
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      
+      // Extract bio and recent articles
+      const name = $('meta[property="og:title"]').attr("content") || $("h1").first().text();
+      const bio = $('meta[property="og:description"]').attr("content") || $('meta[name="description"]').attr("content");
+      const articles = [];
+      $("h2, h3").each((i, el) => { if (i < 5) articles.push($(el).text().trim()); });
+      
+      const content = [
+        name ? `Name/Title: ${name}` : "",
+        bio ? `Bio: ${bio}` : "",
+        articles.length ? `Recent articles:\n${articles.join("\n")}` : "",
+      ].filter(Boolean).join("\n");
+
+      console.log(`[scrapeUrl] Medium scraped: ${url}`);
+      return { source: url, content: content.slice(0, 2000), error: null };
+    }
+
+    // Generic website — fetch and extract meaningful text
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)",
+        "Accept": "text/html",
+      },
+      timeout: 8000,
+    });
+    
+    if (!res.ok) return { source: url, content: null, error: `HTTP ${res.status}` };
+    
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    
+    // Remove noise
+    $("script, style, nav, footer, header, aside, .cookie, .banner, .ad").remove();
+    
+    // Extract key content
+    const title = $("title").text().trim();
+    const metaDesc = $('meta[name="description"]').attr("content") || $('meta[property="og:description"]').attr("content") || "";
+    const h1 = $("h1").first().text().trim();
+    const h2s = [];
+    $("h2").each((i, el) => { if (i < 4) h2s.push($(el).text().trim()); });
+    
+    // Get body text — prioritize main/article content
+    let bodyText = $("main, article, .about, .bio, #about, #bio, .content").first().text() || $("body").text();
+    bodyText = bodyText.replace(/\s+/g, " ").trim().slice(0, 1500);
+    
+    const content = [
+      title ? `Page: ${title}` : "",
+      metaDesc ? `Description: ${metaDesc}` : "",
+      h1 ? `Headline: ${h1}` : "",
+      h2s.length ? `Sections: ${h2s.join(", ")}` : "",
+      bodyText ? `Content: ${bodyText}` : "",
+    ].filter(Boolean).join("\n");
+
+    console.log(`[scrapeUrl] Generic site scraped: ${url}`);
+    return { source: url, content: content.slice(0, 2000), error: null };
+
   } catch (err) {
     console.error(`[scrapeUrl] Failed for ${url}:`, err.message);
     return { source: url, content: null, error: err.message };

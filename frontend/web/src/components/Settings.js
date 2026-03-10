@@ -41,8 +41,10 @@ export default function Settings() {
         headers: { Authorization: `Bearer ${token}` },
       });
       await auth.currentUser?.delete();
+      const { signInAnonymously } = await import("firebase/auth");
+      await signInAnonymously(auth);
       reset();
-      setScreen("splash");
+      setScreen("onboarding");
     } catch (err) {
       setDone("Failed to delete account. Please try again.");
     }

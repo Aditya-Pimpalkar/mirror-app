@@ -7,7 +7,7 @@ import { PERSONAS } from "./ui";
 
 export default function Splash() {
   const [visible, setVisible] = useState(false);
-  const { setScreen } = useMirrorStore();
+  const { setScreen, profile } = useMirrorStore();
 
   useEffect(() => {
     setTimeout(() => setVisible(true), 100);
@@ -71,7 +71,7 @@ export default function Splash() {
 
       {/* CTA */}
       <button
-        onClick={() => setScreen("onboarding")}
+        onClick={() => setScreen(profile?.userName ? "home" : "onboarding")}
         style={{
           background: "var(--gold)",
           color: "#070707",

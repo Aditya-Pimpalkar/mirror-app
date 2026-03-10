@@ -64,12 +64,17 @@ export default function App() {
             const token = await user.getIdToken();
             await loadAllPersonaState(token, store);
 
-            setScreen("home");
+            // Only advance if not already on splash — don't interrupt user
+            if (store.screen === "splash" || store.screen === "onboarding") {
+              setScreen("home");
+            }
           } else {
-            setScreen("onboarding");
+            if (store.screen === "splash" || store.screen === "home") {
+              setScreen("splash"); // Stay on splash, Splash button goes to onboarding
+            }
           }
         } catch {
-          setScreen("onboarding");
+          if (store.screen !== "home") setScreen("splash");
         }
       } else {
         setScreen("splash");
