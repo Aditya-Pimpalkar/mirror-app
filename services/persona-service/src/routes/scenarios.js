@@ -127,7 +127,8 @@ Return JSON:
   "advice": "<one concrete actionable tip>"
 }`);
 
-      const data = JSON.parse(result.response.text());
+      const rawText = result.response.text().replace(/```json|```/g, "").trim();
+      const data = JSON.parse(rawText);
       return { personaId, personaName: persona.name, personaEmoji: persona.emoji, personaColor: persona.color || "#D4A853", ...data };
     });
 

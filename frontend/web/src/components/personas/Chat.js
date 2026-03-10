@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useMirrorStore } from "../../store";
 import { streamChat } from "../../lib/api";
 import { useGeminiLive } from "../../hooks/useGeminiLive";
+import { useEmotionCamera } from "../../hooks/useEmotionCamera";
 import { BeliefBar, PersonaAvatar, LoadingDots, PERSONAS } from "../ui";
 import ShareVerdict from "../ShareVerdict";
 
@@ -21,7 +22,13 @@ export default function Chat() {
   const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [shareVerdict, setShareVerdict] = useState(null); // { quote, personaId }
+  const [shareVerdict, setShareVerdict] = useState(null);
+  const [emotionEnabled, setEmotionEnabled] = useState(false);
+  const { latestEmotion, startCamera, stopCamera } = useEmotionCamera({
+    personaId: activePersonaId,
+    enabled: emotionEnabled,
+    onEmotion: (obs) => console.log("[Emotion]", obs),
+  }); // { quote, personaId }
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const summariesLoadedRef = useRef(false);
@@ -285,6 +292,24 @@ export default function Chat() {
             personaName={persona.name}
             personaColor={persona.color}
           />
+        )}
+        {isConnected && (
+          <button
+            onClick={() => {
+              if (emotionEnabled) { stopCamera(); setEmotionEnabled(false); }
+              else { startCamera(); setEmotionEnabled(true); }
+            }}
+            style={{
+              marginTop: 8, padding: "8px 14px", width: "100%",
+              background: emotionEnabled ? "rgba(107,163,214,0.1)" : "rgba(255,255,255,0.02)",
+              border: `1px solid ${emotionEnabled ? "rgba(107,163,214,0.3)" : "rgba(255,255,255,0.06)"}`,
+              borderRadius: 10, fontFamily: "var(--font-mono)", fontSize: 10,
+              color: emotionEnabled ? "#6BA3D6" : "rgba(255,255,255,0.3)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {emotionEnabled ? "📷 READING FACE — TAP TO STOP" : "📷 ENABLE FACE READING"}
+          </button>
         )}
       </div>
       {/* Share Verdict modal */}
