@@ -355,12 +355,13 @@ geminiWs.send(JSON.stringify({
 
     // ── Camera emotion frame ──
     case "emotion_frame": {
-      // Store latest emotion signal to inject into next Gemini message
-      session._latestEmotionSignal = msg.emotion;
-      session.emotionSignals.push({
-        ...msg.emotion,
-        timestamp: new Date().toISOString(),
-      });
+      // Store emotion signal to inject into next Gemini message
+      session._latestEmotionSignal = {
+        observation: msg.observation,
+        dominant_emotion: msg.dominant_emotion,
+        intensity: msg.intensity || 0.7,
+      };
+      console.log(`[LiveSession:${sessionId}] Emotion signal: ${msg.dominant_emotion} — ${msg.observation?.slice(0, 60)}`);
       break;
     }
 
