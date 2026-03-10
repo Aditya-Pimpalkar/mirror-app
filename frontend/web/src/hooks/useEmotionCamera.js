@@ -19,7 +19,6 @@ export function useEmotionCamera({ personaId, onEmotionDetected, enabled = true 
   // ── Start camera ──────────────────────────────────────────────────────────
 
   const startCamera = useCallback(async () => {
-    if (!enabled) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -70,20 +69,21 @@ export function useEmotionCamera({ personaId, onEmotionDetected, enabled = true 
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ frame: base64Frame }),
+        body: JSON.stringify({ imageBase64: base64Frame }),
       });
 
       if (!res.ok) return;
-      const { emotion } = await res.json();
+      const data = await res.json();
+      console.log("[EmotionCamera] Response:", data);
+      const observation = data.observation;
 
-      if (emotion) {
-        setLatestEmotion(emotion);
-        onEmotionDetected?.(emotion);
+      if (observation) {
+        setLatestEmotion(observation);
+        onEmotionDetected?.(observation);
       }
 
     } catch (err) {
-      // Silent fail — emotion capture is enhancement, not critical
-      console.debug("[EmotionCamera] Capture error:", err.message);
+      console.log("[EmotionCamera] Capture error:", err.message, err);
     }
   }, [personaId, onEmotionDetected]);
 

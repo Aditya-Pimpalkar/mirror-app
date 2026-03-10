@@ -221,6 +221,20 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
     wsRef.current.send(JSON.stringify({ type: "text_input", text }));
   }, []);
 
+  const sendEmotion = useCallback((observation) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const dominant = observation.includes("tension") ? "tension" :
+                     observation.includes("confidence") ? "confidence" :
+                     observation.includes("discomfort") ? "discomfort" :
+                     observation.includes("engaged") ? "engagement" : "neutral";
+    wsRef.current.send(JSON.stringify({
+      type: "emotion_frame",
+      observation,
+      dominant_emotion: dominant,
+      intensity: 0.7,
+    }));
+  }, []);
+
   const disconnect = useCallback(() => {
     stopMic();
     stopAudio();
@@ -241,5 +255,5 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
 
   useEffect(() => () => disconnect(), []);
 
-  return { isConnected, isListening, isSpeaking, connect, disconnect, startListening, stopListening, sendText };
+  return { isConnected, isListening, isSpeaking, connect, disconnect, startListening, stopListening, sendText, sendEmotion };
 }

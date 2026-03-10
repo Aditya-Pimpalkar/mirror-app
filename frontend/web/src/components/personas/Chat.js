@@ -24,10 +24,15 @@ export default function Chat() {
   const [streamingText, setStreamingText] = useState("");
   const [shareVerdict, setShareVerdict] = useState(null);
   const [emotionEnabled, setEmotionEnabled] = useState(false);
-  const { latestEmotion, startCamera, stopCamera } = useEmotionCamera({
+  const handleEmotion = useCallback((obs) => {
+    console.log("[Emotion]", obs);
+    if (isConnected) sendEmotion?.(obs);
+  }, [isConnected, sendEmotion]);
+
+  const { latestEmotion, startCamera, stopCamera, videoRef, canvasRef, isActive, permission } = useEmotionCamera({
     personaId: activePersonaId,
     enabled: emotionEnabled,
-    onEmotion: (obs) => console.log("[Emotion]", obs),
+    onEmotionDetected: handleEmotion,
   }); // { quote, personaId }
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -89,7 +94,7 @@ export default function Chat() {
   }, [activePersonaId]);
 
   // ── Gemini Live ───────────────────────────────────────────────────────────
-  const { isConnected, isListening: liveListening, isSpeaking, connect, disconnect, startListening: startLive, stopListening: stopLive, sendText } = useGeminiLive({
+  const { isConnected, isListening: liveListening, isSpeaking, connect, disconnect, startListening: startLive, stopListening: stopLive, sendText, sendEmotion } = useGeminiLive({
     personaId: activePersonaId,
     onMessage: (msg) => {
       if (msg.type === "chunk") {
@@ -258,6 +263,23 @@ export default function Chat() {
         <div ref={chatEndRef} />
       </div>
 
+      {/* Emotion indicator */}
+      {latestEmotion && emotionEnabled && (
+        <div style={{
+          margin: "0 16px 8px",
+          padding: "8px 14px",
+          background: "rgba(107,163,214,0.06)",
+          border: "1px solid rgba(107,163,214,0.2)",
+          borderRadius: 10,
+          display: "flex", alignItems: "flex-start", gap: 8,
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>👁</span>
+          <span style={{ fontFamily: "var(--font-body)", color: "rgba(255,255,255,0.55)", fontSize: 12, fontStyle: "italic", lineHeight: 1.5 }}>
+            {latestEmotion}
+          </span>
+        </div>
+      )}
+
       {/* Input area */}
       <div style={{ padding: "12px 16px 24px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "var(--bg)", flexShrink: 0 }}>
         {isConnected ? (
@@ -296,8 +318,13 @@ export default function Chat() {
         {isConnected && (
           <button
             onClick={() => {
-              if (emotionEnabled) { stopCamera(); setEmotionEnabled(false); }
-              else { startCamera(); setEmotionEnabled(true); }
+              if (emotionEnabled) { 
+                stopCamera(); 
+                setEmotionEnabled(false); 
+              } else { 
+                setEmotionEnabled(true);
+                startCamera(); 
+              }
             }}
             style={{
               marginTop: 8, padding: "8px 14px", width: "100%",
@@ -308,10 +335,16 @@ export default function Chat() {
               letterSpacing: "0.1em",
             }}
           >
-            {emotionEnabled ? "📷 READING FACE — TAP TO STOP" : "📷 ENABLE FACE READING"}
+            {emotionEnabled && isActive ? "📷 READING FACE — TAP TO STOP" : 
+               emotionEnabled && permission === "denied" ? "📷 CAMERA DENIED — CHECK PERMISSIONS" :
+               "📷 ENABLE FACE READING"}
           </button>
         )}
       </div>
+      {/* Camera elements — small preview when active */}
+      <video ref={videoRef} style={{ display: emotionEnabled && isActive ? "block" : "none", position: "fixed", bottom: 120, right: 16, width: 140, height: 105, borderRadius: 10, border: "1px solid rgba(107,163,214,0.4)", objectFit: "cover", zIndex: 50 }} muted playsInline />
+      <canvas ref={canvasRef} style={{ display: "none" }} />
+
       {/* Share Verdict modal */}
       {shareVerdict && (
         <ShareVerdict
