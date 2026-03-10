@@ -244,3 +244,35 @@ router.get("/:personaId/voice-summaries", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch voice summaries" });
   }
 });
+
+// ─── POST /personas/:personaId/analyze-emotion ────────────────────────────────
+router.post("/:personaId/analyze-emotion", requireAuth, async (req, res) => {
+  const { personaId } = req.params;
+  const { imageBase64, context } = req.body;
+  if (!imageBase64) return res.status(400).json({ error: "imageBase64 required" });
+
+  try {
+    const { GoogleGenerativeAI } = require("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent({
+      contents: [{
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+          { text: `You are analyzing facial expressions during a conversation with ${personaId}.
+Context: "${context || "conversation in progress"}"
+In ONE sentence, describe what this person's expression reveals about their emotional state.
+Focus on: eye contact, tension, confidence, discomfort. Be direct and specific.` }
+        ]
+      }]
+    });
+
+    const observation = result.response.text().trim();
+    res.json({ observation, personaId });
+  } catch (err) {
+    console.error("[analyze-emotion]", err.message);
+    res.status(500).json({ error: "Analysis failed" });
+  }
+});
