@@ -241,13 +241,12 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
 
       if (turnCount > 0 && allMessages.length > 0) {
         const result = await model.generateContent(
-          `You are ${persona?.name || session.personaId}, a ${persona?.role || "persona"}.
-You just had a ${turnCount}-turn voice conversation with ${session.userName}.
-${userMsgs ? `They said: "${userMsgs.slice(0, 300)}"` : "No user messages recorded."}
+          `You are ${persona?.name || session.personaId}, a ${persona?.role || "persona"} in Mirror app.
+You just had a real-time voice conversation with ${session.userName || "the user"} (${turnCount} turns).
+${userMsgs ? `Key things they said: "${userMsgs.slice(0, 400)}".` : `It was a voice-only session — you heard their voice directly.`}
 
-Write 2-3 sentences summarizing this conversation from your perspective.
-What were your key observations? What challenged or interested you?
-Be specific and stay in character. No preamble.`
+Write 2-3 sentences from YOUR perspective summarizing the conversation.
+What stood out to you? What questions remain? Stay in character. No preamble.`
         );
 
         const summary = result.response.text().trim();

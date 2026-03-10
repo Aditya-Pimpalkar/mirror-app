@@ -309,7 +309,7 @@ app.post("/synthesis/weekly-report", async (req, res) => {
     // Generate report with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 2000, temperature: 0.75, responseMimeType: "application/json" },
+      generationConfig: { maxOutputTokens: 2000, temperature: 0.75 },
     });
 
     const result = await model.generateContent(`
