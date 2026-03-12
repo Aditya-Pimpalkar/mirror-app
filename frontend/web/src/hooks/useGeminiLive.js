@@ -221,6 +221,11 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
     wsRef.current.send(JSON.stringify({ type: "text_input", text }));
   }, []);
 
+  const sendCaption = useCallback((text) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "user_caption", text }));
+  }, []);
+
   const sendEmotion = useCallback((observation) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const dominant = observation.includes("tension") ? "tension" :
@@ -239,15 +244,11 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
     stopMic();
     stopAudio();
     if (wsRef.current) {
+      // Signal end of session; server will persist when client WS actually closes.
       try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
-      // Wait 3s for session_summary before closing
-      setTimeout(() => {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-        setIsConnected(false);
-      }, 3000);
+      try { wsRef.current.close(); } catch {}
+      wsRef.current = null;
+      setIsConnected(false);
     } else {
       setIsConnected(false);
     }
@@ -255,5 +256,5 @@ export function useGeminiLive({ personaId, onMessage, onBeliefUpdate, onSessionR
 
   useEffect(() => () => disconnect(), []);
 
-  return { isConnected, isListening, isSpeaking, connect, disconnect, startListening, stopListening, sendText, sendEmotion };
+  return { isConnected, isListening, isSpeaking, connect, disconnect, startListening, stopListening, sendText, sendCaption, sendEmotion };
 }

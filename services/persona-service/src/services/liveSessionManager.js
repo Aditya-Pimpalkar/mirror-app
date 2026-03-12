@@ -34,6 +34,8 @@ const GEMINI_LIVE_URL =
 async function createLiveSession({ clientWs, userId, personaId, dossier, userName }) {
   const sessionId = uuidv4();
   const persona = PERSONAS[personaId];
+  const today = new Date().toISOString().split("T")[0];
+  const sessionDocId = `voice-${today}-${sessionId.slice(0, 8)}`;
 
   if (!persona) {
     clientWs.send(JSON.stringify({ type: "error", message: `Unknown persona: ${personaId}` }));
@@ -53,6 +55,7 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
 
   const session = {
     sessionId,
+    sessionDocId,
     userId,
     personaId,
     persona,
@@ -224,49 +227,62 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
 
   clientWs.on("close", async () => {
     console.log(`[LiveSession:${sessionId}] Client disconnected — generating summary`);
-    
-    // Generate summary when client disconnects
-    try {
-      const { GoogleGenerativeAI } = require("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-        generationConfig: { maxOutputTokens: 600, temperature: 0.2 },
-      });
 
-      const turnCount = session._turnCount || 0;
-      const persona = PERSONAS[session.personaId];
-      const allMessages = session.messages || [];
-      const userMsgs = allMessages.filter(m => m.role === "user").map(m => m.content).join(" | ");
+    const turnCount = session._turnCount || 0;
+    if (turnCount > 0) {
+      try {
+        const { GoogleGenerativeAI } = require("@google/generative-ai");
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+          model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+          generationConfig: { maxOutputTokens: 400, temperature: 0.2 },
+        });
 
-      if (turnCount > 0 && allMessages.length > 0) {
+        const persona = PERSONAS[session.personaId];
+        const allMessages = session.messages || [];
+        const userMsgs = allMessages
+          .filter((m) => m.role === "user" && m.content)
+          .map((m) => m.content)
+          .join(" | ");
+        const agentMsgs = allMessages
+          .filter((m) => m.role === "assistant" && m.content)
+          .map((m) => m.content)
+          .join(" | ");
+
         const result = await model.generateContent(
           `You are ${persona?.name || session.personaId}, a ${persona?.role || "persona"} in Mirror app.
 You just had a real-time voice conversation with ${session.userName || "the user"} (${turnCount} turns).
-${userMsgs ? `Key things they said: "${userMsgs.slice(0, 400)}".` : `It was a voice-only session — you heard their voice directly.`}
 
-Write 2-3 sentences from YOUR perspective summarizing the conversation.
-What stood out to you? What questions remain? Stay in character. No preamble.`
+What the user said (SpeechRecognition captions):
+${userMsgs ? `"${userMsgs.slice(0, 800)}"` : "No user captions were captured."}
+
+What you (the persona) said (may be partial):
+${agentMsgs ? `"${agentMsgs.slice(0, 800)}"` : "No persona text was captured during the live audio session."}
+
+Write 2-3 sentences summarizing this conversation from your perspective.
+Stay in character. No preamble.`
         );
 
         const summary = result.response.text().trim();
-        console.log(`[LiveSession:${sessionId}] Summary generated: ${summary.slice(0, 80)}`);
-        
-        // Store summary in Firestore for frontend to fetch
-        const db = getFirestore();
-        await db.collection("users").doc(session.userId)
-          .collection("personas").doc(session.personaId)
-          .collection("voice_summaries").add({
-            summary,
-            turns: turnCount,
-            sessionId,
-            createdAt: new Date().toISOString(),
+        if (summary) {
+          session.messages.push({
+            role: "assistant",
+            content: `[Voice session — ${turnCount} turns]\n\n${summary}`,
+            timestamp: new Date().toISOString(),
+            mode: "voice_summary",
           });
+        }
+      } catch (err) {
+        console.error("[Summary]", err.message);
       }
-    } catch (err) {
-      console.error("[Summary]", err.message);
     }
-    persistSession(sessionId);
+
+    try {
+      console.log(`[DEBUG] Persisting session with ${session.messages.length} messages`);
+      await persistSession(sessionId);
+    } catch (err) {
+      console.error(`[LiveSession:${sessionId}] Persist on close failed:`, err);
+    }
     cleanupSession(sessionId);
   });
 
@@ -283,6 +299,19 @@ async function handleClientMessage(sessionId, msg) {
   const { geminiWs } = session;
 
   switch (msg.type) {
+    // ── User caption (SpeechRecognition) ──
+    case "user_caption": {
+      const text = msg.text?.trim();
+      if (!text) return;
+      session.messages.push({
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+        mode: "voice",
+      });
+      break;
+    }
+
     // ── Audio from user's microphone ──
     case "audio_input": {
       if (geminiWs.readyState !== WebSocket.OPEN) return;
@@ -304,9 +333,6 @@ geminiWs.send(JSON.stringify({
     case "text_input": {
       if (!msg.text?.trim()) return;
       if (geminiWs.readyState !== WebSocket.OPEN) return;
-      // Track user message
-      session.messages.push({ role: "user", content: msg.text.trim(), timestamp: new Date().toISOString() });
-
       // Score the message for evidence/pushback
       const score = scoreMessage(session.personaId, msg.text);
 
@@ -314,11 +340,12 @@ geminiWs.send(JSON.stringify({
       const newBelief = Math.min(95, Math.max(5, session.currentBelief + score.evidenceScore));
       session.currentBelief = newBelief;
 
-      // Log user message
+      // Log user message (ONCE)
       session.messages.push({
         role: "user",
-        content: msg.text,
+        content: msg.text.trim(),
         timestamp: new Date().toISOString(),
+        mode: "text",
         evidenceScore: score.evidenceScore,
         hasEvidence: score.hasEvidence,
       });
@@ -365,10 +392,9 @@ geminiWs.send(JSON.stringify({
       break;
     }
 
-    // ── End session ──
+    // ── End session (signal only; persistence happens on clientWs.close) ──
     case "end_session": {
-      await persistSession(sessionId);
-      cleanupSession(sessionId);
+      // No-op: we let clientWs.on("close") generate summary and persist once.
       break;
     }
   }
@@ -379,17 +405,18 @@ geminiWs.send(JSON.stringify({
  */
 async function persistSession(sessionId) {
   const session = activeSessions.get(sessionId);
-  if (!session || session.messages.length === 0) return;
+  if (!session) return;
+  if (session.messages.length === 0) return;
 
   try {
     const db = getFirestore();
     const sessionRef = db
       .collection("users").doc(session.userId)
       .collection("personas").doc(session.personaId)
-      .collection("sessions").doc(sessionId);
+      .collection("sessions").doc(session.sessionDocId || sessionId);
 
     await sessionRef.set({
-      sessionId,
+      sessionId: session.sessionDocId || sessionId,
       personaId: session.personaId,
       userId: session.userId,
       messages: session.messages,
@@ -400,6 +427,7 @@ async function persistSession(sessionId) {
       startedAt: session.startedAt,
       endedAt: new Date().toISOString(),
       messageCount: session.messages.length,
+      mode: "voice",
     });
 
     // Update persona summary doc

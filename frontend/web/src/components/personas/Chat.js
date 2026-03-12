@@ -10,7 +10,7 @@ import ShareVerdict from "../ShareVerdict";
 export default function Chat() {
   const {
     activePersonaId, conversations, beliefs, completedPersonas,
-    addMessage, setScreen, updateBelief, markPersonaComplete, profile, updateStreak,
+    addMessage, setConversation, setScreen, updateBelief, markPersonaComplete, profile, updateStreak,
   } = useMirrorStore();
 
   const persona = PERSONAS[activePersonaId];
@@ -24,20 +24,10 @@ export default function Chat() {
   const [streamingText, setStreamingText] = useState("");
   const [shareVerdict, setShareVerdict] = useState(null);
   const [emotionEnabled, setEmotionEnabled] = useState(false);
-  const handleEmotion = useCallback((obs) => {
-    console.log("[Emotion]", obs);
-    if (isConnected) sendEmotion?.(obs);
-  }, [isConnected, sendEmotion]);
-
-  const { latestEmotion, startCamera, stopCamera, videoRef, canvasRef, isActive, permission } = useEmotionCamera({
-    personaId: activePersonaId,
-    enabled: emotionEnabled,
-    onEmotionDetected: handleEmotion,
-  }); // { quote, personaId }
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
-  const summariesLoadedRef = useRef(false);
-  const openingAddedRef = useRef(false);
+  const loadedPersonasRef = useRef(new Set());
+  const openingAddedRef = useRef(new Set());
 
   const belief = beliefs[activePersonaId] || persona?.initialBelief || 20;
 
@@ -45,44 +35,36 @@ export default function Chat() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, isLoading]);
 
-  // Load voice summaries from Firestore
+  // Load unified thread (voice + text) from backend
   useEffect(() => {
     if (!persona) return;
-    if (summariesLoadedRef.current) return;
-    summariesLoadedRef.current = true;
-    const loadVoiceSummaries = async () => {
+    if (loadedPersonasRef.current.has(activePersonaId)) return;
+    loadedPersonasRef.current.add(activePersonaId);
+
+    const loadThread = async () => {
       try {
         const { getIdToken } = await import("../../lib/firebase.js");
         const token = await getIdToken();
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_PERSONA_SERVICE_URL}/personas/${activePersonaId}/voice-summaries`,
+          `${process.env.NEXT_PUBLIC_PERSONA_SERVICE_URL}/personas/${activePersonaId}/thread`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) return;
         const data = await res.json();
-        data.summaries?.forEach(s => {
-          const exists = messages.some(m => m.voiceSummaryId === s.id);
-          if (!exists && s.summary) {
-            addMessage(activePersonaId, {
-              role: "assistant",
-              content: `🎙️ Voice session (${s.turns} turns)\n\n${s.summary}`,
-              timestamp: s.createdAt,
-              source: "voice_summary",
-              voiceSummaryId: s.id,
-            });
-          }
-        });
+        if (data.messages?.length > 0) {
+          setConversation(activePersonaId, data.messages);
+        }
       } catch {}
     };
-    loadVoiceSummaries();
+    loadThread();
   }, [activePersonaId]);
 
   // Opening message — only once
   useEffect(() => {
-    if (!persona || openingAddedRef.current) return;
-    const realMessages = (conversations[activePersonaId] || []).filter(m => !m.source?.includes("voice"));
+    if (!persona || openingAddedRef.current.has(activePersonaId)) return;
+    const realMessages = (conversations[activePersonaId] || []).filter(m => m.mode !== "voice_summary");
     if (realMessages.length > 0) return;
-    openingAddedRef.current = true;
+    openingAddedRef.current.add(activePersonaId);
     const firstName = profile?.userName?.split(" ")[0] || "you";
     const opening = {
       recruiter: `I've looked you over, ${firstName}. Your trajectory raises some questions. Let's start with the gaps.`,
@@ -94,20 +76,22 @@ export default function Chat() {
   }, [activePersonaId]);
 
   // ── Gemini Live ───────────────────────────────────────────────────────────
-  const { isConnected, isListening: liveListening, isSpeaking, connect, disconnect, startListening: startLive, stopListening: stopLive, sendText, sendEmotion } = useGeminiLive({
+  const { isConnected, isListening: liveListening, isSpeaking, connect, disconnect, startListening: startLive, stopListening: stopLive, sendText, sendCaption, sendEmotion } = useGeminiLive({
     personaId: activePersonaId,
     onMessage: (msg) => {
       if (msg.type === "chunk") {
         setStreamingText((prev) => prev + msg.text);
       } else if (msg.type === "turn_complete") {
-        if (msg.text?.trim()) {
-          addMessage(activePersonaId, { role: "assistant", content: msg.text, timestamp: new Date().toISOString(), source: "voice" });
-        }
         setStreamingText("");
+        if (msg.belief) updateBelief(activePersonaId, msg.belief);
+        // For audio-only Live sessions, msg.text is typically empty; only add if present.
+        if (msg.text?.trim()) {
+          addMessage(activePersonaId, { role: "assistant", content: msg.text.trim(), timestamp: new Date().toISOString(), mode: "voice" });
+        }
       } else if (msg.type === "user_transcript" && msg.isFinal && msg.text?.trim()) {
-        addMessage(activePersonaId, { role: "user", content: msg.text, timestamp: new Date().toISOString(), source: "voice" });
+        addMessage(activePersonaId, { role: "user", content: msg.text, timestamp: new Date().toISOString(), mode: "voice" });
       } else if (msg.type === "persona_transcript" && msg.isFinal && msg.text?.trim()) {
-        addMessage(activePersonaId, { role: "assistant", content: msg.text, timestamp: new Date().toISOString(), source: "voice" });
+        addMessage(activePersonaId, { role: "assistant", content: msg.text, timestamp: new Date().toISOString(), mode: "voice" });
         setStreamingText("");
       } else if (msg.type === "session_summary") {
         if (msg.text?.trim()) {
@@ -115,7 +99,7 @@ export default function Chat() {
             role: "assistant",
             content: `[Voice session — ${msg.turns} turns]\n\n${msg.text}`,
             timestamp: new Date().toISOString(),
-            source: "voice_summary"
+            mode: "voice_summary"
           });
         }
       } else if (msg.type === "interrupted") {
@@ -135,6 +119,73 @@ export default function Chat() {
       console.log("[Chat] Live session ready");
     },
     onError: (err) => { console.error("[Chat] Live error:", err); },
+  });
+
+  // Browser SpeechRecognition captions during Live voice:
+  // Show in chat immediately and persist to backend via WS (user_caption).
+  useEffect(() => {
+    if (!isConnected) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false;
+
+    rec.onresult = (e) => {
+      const result = e.results[e.results.length - 1];
+      if (!result?.isFinal) return;
+      const text = result[0]?.transcript?.trim();
+      if (!text) return;
+      addMessage(activePersonaId, {
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+        mode: "voice",
+      });
+      sendCaption?.(text);
+    };
+
+    rec.onend = () => {
+      // Auto-restart so it keeps listening throughout the session
+      if (isConnected) {
+        try { rec.start(); } catch {}
+      }
+    };
+
+    rec.onerror = (e) => {
+      if (e.error !== "aborted" && isConnected) {
+        try { rec.start(); } catch {}
+      }
+    };
+
+    try { rec.start(); } catch {}
+
+    return () => {
+      try { rec.abort(); } catch {}
+    };
+  }, [isConnected, activePersonaId]);
+
+  // After Live voice ends, mark thread as stale so it reloads on next entry.
+  const prevConnectedRef = useRef(false);
+  useEffect(() => {
+    const wasConnected = prevConnectedRef.current;
+    prevConnectedRef.current = isConnected;
+    if (wasConnected && !isConnected) {
+      // Mark this persona's thread as stale so it reloads next time chat opens
+      loadedPersonasRef.current.delete(activePersonaId);
+    }
+  }, [isConnected, activePersonaId]);
+
+  const handleEmotion = useCallback((obs) => {
+    console.log("[Emotion]", obs);
+    if (isConnected) sendEmotion?.(obs);
+  }, [isConnected, sendEmotion]);
+
+  const { latestEmotion, startCamera, stopCamera, videoRef, canvasRef, isActive, permission } = useEmotionCamera({
+    personaId: activePersonaId,
+    enabled: emotionEnabled,
+    onEmotionDetected: handleEmotion,
   });
 
   // ── Browser speech recognition ────────────────────────────────────────────
@@ -188,10 +239,11 @@ export default function Chat() {
   const endConversation = async () => {
     disconnect();
     markPersonaComplete(activePersonaId);
-    // Update streak — increment if belief improved
-    const currentBelief = beliefs[activePersonaId] || 20;
-    const initialBelief = PERSONAS[activePersonaId]?.initialBelief || 20;
-    updateStreak(activePersonaId, true); // Always increment — talked today
+    // Always mark streak for talking today
+    updateStreak(activePersonaId, true);
+    // Clear loaded flag so thread reloads next time chat opens
+    loadedPersonasRef.current.delete(activePersonaId);
+    // Navigate home after delay
     setTimeout(() => setScreen("home"), 3500);
   };
 

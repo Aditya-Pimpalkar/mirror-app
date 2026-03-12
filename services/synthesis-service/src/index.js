@@ -153,8 +153,9 @@ app.post("/synthesis/perception-map", requireAuth, async (req, res) => {
 
     // Build conversation summaries for Gemini
     const convSummaries = personaData.map((p) => {
-      const msgs = p.recentMessages.slice(-6).map((m) =>
-        `${m.role === "user" ? "User" : "Persona"}: ${m.content?.slice(0, 150)}`
+      // Focus on the most recent turns and shorter snippets to keep the prompt compact
+      const msgs = p.recentMessages.slice(-4).map((m) =>
+        `${m.role === "user" ? "User" : "Persona"}: ${m.content?.slice(0, 100)}`
       ).join("\n");
       return `${p.id.toUpperCase()} (belief: ${p.belief}/100, ${p.conversationCount} conversations):\n${msgs || "No conversations yet"}`;
     }).join("\n\n---\n\n");
@@ -162,7 +163,12 @@ app.post("/synthesis/perception-map", requireAuth, async (req, res) => {
     // Generate with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 2000, temperature: 0.2, responseMimeType: "application/json" },
+      generationConfig: {
+        // More headroom so the model can finish the full JSON object
+        maxOutputTokens: 3200,
+        temperature: 0.2,
+        responseMimeType: "application/json",
+      },
     });
 
     const prompt = `Generate a Perception Map for ${profile.userName}.
@@ -176,28 +182,54 @@ GAP SCORE: ${gapScore}/100 (lower is better)
 
 Return ONLY valid JSON:
 {
-  "headline": "brutally honest 10-12 word summary of how the world sees them right now",
-  "consensus": "what all 4 personas fundamentally agree on, 2 sentences",
-  "gap": "the most significant disconnect between self-perception and external reality, 2 sentences",
-  "blindspot": "the single most important thing they are not seeing about themselves, 1 sentence",
+  "headline": "One brutally honest 10-12 word summary of how the world sees them right now.",
+  "consensus": "1-2 sentences (max 60 words) on what all 4 personas fundamentally agree on.",
+  "gap": "1-2 sentences (max 80 words) on the most significant disconnect between self-perception and external reality.",
+  "blindspot": "1 sentence (max 40 words) describing the single most important thing they are not seeing about themselves.",
   "strengths": ["genuine strength 1", "genuine strength 2", "genuine strength 3"],
   "risks": ["perception risk 1", "perception risk 2"],
   "verdicts": {
-    "recruiter": "Rachel's 2-sentence final career verdict",
-    "date": "Alex's 2-sentence relationship/personal verdict",
-    "competitor": "Chris's 2-sentence competitive assessment",
-    "journalist": "Jordan's 2-sentence public narrative verdict"
+    "recruiter": "Rachel's 2-sentence final career verdict (max 60 words).",
+    "date": "Alex's 2-sentence relationship/personal verdict (max 60 words).",
+    "competitor": "Chris's 2-sentence competitive assessment (max 60 words).",
+    "journalist": "Jordan's 2-sentence public narrative verdict (max 60 words)."
   },
-  "archetype_id": "one of: vault|spark|contractor|ghost|overexposed|architect",
+  "archetype_id": "string, one of: vault|spark|contractor|ghost|overexposed|architect",
   "archetype_confidence": 0.0-1.0,
-  "question": "the single most important and uncomfortable question for them to sit with — make it specific to their situation"
+  "question": "1 sentence (max 30 words) — the single most important and uncomfortable question for them to sit with, specific to their situation."
 }`;
 
     const result = await model.generateContent(prompt);
     const rawMap = result.response.text().replace(/```json|```/g, "").trim();
-    // Fix unescaped quotes inside JSON string values
-    let fixedMap = rawMap.replace(/,\s*([}\]])/g, "$1");
-    const mapData = JSON.parse(fixedMap);
+
+    let mapData;
+    try {
+      // First attempt: parse as-is
+      mapData = JSON.parse(rawMap);
+    } catch (parseErr) {
+      console.error("[perception-map] JSON parse failed, attempting repair", parseErr);
+      console.error("[perception-map] Raw output:", rawMap);
+
+      // Fallback: ask Gemini to repair the JSON into a valid object
+      const repairModel = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          maxOutputTokens: 2000,
+          temperature: 0.0,
+          responseMimeType: "application/json",
+        },
+      });
+
+      const repairPrompt = `The following text is intended to be a single JSON object, but may contain minor formatting issues (such as trailing commas or unescaped quotes).
+Your task is to return ONLY a valid JSON object that best matches the intent. Do not include any explanations, comments, or Markdown fences.
+
+Text to repair:
+${rawMap}`;
+
+      const repairResult = await repairModel.generateContent(repairPrompt);
+      const repaired = repairResult.response.text().replace(/```json|```/g, "").trim();
+      mapData = JSON.parse(repaired);
+    }
 
     // Attach full archetype details
     const archetype = ARCHETYPES[mapData.archetype_id] || ARCHETYPES.vault;

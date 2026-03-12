@@ -245,6 +245,47 @@ router.get("/:personaId/voice-summaries", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /personas/:personaId/thread ──────────────────────────────────────────
+// Returns a unified, chronological chat thread (voice + text) for a persona.
+router.get("/:personaId/thread", requireAuth, async (req, res) => {
+  const { personaId } = req.params;
+  const userId = req.user.uid;
+
+  try {
+    const db = getFirestore();
+    const sessionsSnap = await db
+      .collection("users").doc(userId)
+      .collection("personas").doc(personaId)
+      .collection("sessions")
+      .orderBy("startedAt", "desc")
+      .limit(5)
+      .get();
+
+    const allMessages = [];
+    // Reverse sessions so we merge from oldest -> newest
+    sessionsSnap.docs.reverse().forEach((doc) => {
+      const msgs = doc.data().messages || [];
+      allMessages.push(...msgs);
+    });
+
+    // Sort by timestamp ascending
+    allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Deduplicate consecutive identical role+content
+    const deduped = [];
+    for (const msg of allMessages) {
+      const last = deduped[deduped.length - 1];
+      if (last && last.role === msg.role && last.content === msg.content) continue;
+      deduped.push(msg);
+    }
+
+    res.json({ messages: deduped });
+  } catch (err) {
+    console.error("[thread]", err.message);
+    res.status(500).json({ error: "Failed to fetch thread" });
+  }
+});
+
 // ─── POST /personas/:personaId/analyze-emotion ────────────────────────────────
 router.post("/:personaId/analyze-emotion", requireAuth, async (req, res) => {
   const { personaId } = req.params;

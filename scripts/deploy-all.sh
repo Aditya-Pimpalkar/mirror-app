@@ -135,9 +135,9 @@ deploy_service() {
   echo "$url"
 }
 
-PERSONA_URL=$(deploy_service "persona-service" 8080 "1Gi" "1")
-PROFILE_URL=$(deploy_service "profile-service" 8081 "1Gi" "0")
-SYNTHESIS_URL=$(deploy_service "synthesis-service" 8082 "512Mi" "0")
+PERSONA_URL=$(deploy_service "persona-service" "8080" "1Gi" "1")
+PROFILE_URL=$(deploy_service "profile-service" "8081" "1Gi" "0")
+SYNTHESIS_URL=$(deploy_service "synthesis-service" "8082" "512Mi" "0")
 
 # ─── Set up Cloud Scheduler ──────────────────────────────────
 echo -e "${BLUE}[7/7]${NC} Setting up Cloud Scheduler..."

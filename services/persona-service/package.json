@@ -11,6 +11,7 @@
     "@google-cloud/firestore": "^7.6.0",
     "@google-cloud/vertexai": "^1.4.0",
     "@google/genai": "^1.44.0",
+    "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
