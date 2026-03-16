@@ -6,7 +6,31 @@ Mirror is a live AI-powered self-awareness app that simulates how four distinct 
 
 You speak your story. No public profiles required. Four AI personas interview you with genuine skepticism, and their belief in you shifts only on verifiable evidence — not emotional pushback.
 
-**Built for the [Gemini Live Agent Challenge](https://googleai.devpost.com/)**
+**Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/)**
+
+### Quick links
+| | |
+|---|---|
+| **Live app** | [Try Mirror](https://mirror-j20zc9tig-aditya-pimpalkars-projects.vercel.app) |
+| **Demo video** | [YouTube / Vimeo](https://www.youtube.com) *(replace with your ≤4 min demo link)* |
+| **Architecture** | Diagram below; backend runs on [Google Cloud Run](https://console.cloud.google.com/run) |
+| **Code** | This repo — public for judging |
+
+---
+
+## 📋 Hackathon submission checklist
+
+| Requirement | Status |
+|-------------|--------|
+| **Category** | Live Agents — real-time voice + vision |
+| **Gemini Live API** | ✅ WebSocket proxy in `persona-service` → `gemini-2.5-flash-native-audio-preview` |
+| **Google GenAI SDK** | ✅ `@google/generative-ai` used across persona, profile, synthesis |
+| **Google Cloud hosting** | ✅ All backends on Cloud Run; Firestore, Secret Manager, Scheduler |
+| **Public repo** | ✅ This repository |
+| **Spin-up instructions** | ✅ Quick Start below + `scripts/deploy-all.sh` |
+| **Proof of GCP** | Screen recording of Cloud Run console or link to deploy/code (see [Architecture](#-architecture)) |
+| **Demo video** | ≤4 min, in English; link in Quick links above |
+| **Architecture diagram** | ASCII diagram in README; optional: add `docs/architecture.png` |
 
 ---
 
@@ -17,7 +41,6 @@ You speak your story. No public profiles required. Four AI personas interview yo
 | **Competition** | Gemini Live Agent Challenge (Devpost) |
 | **Category** | Live Agents |
 | **Deadline** | March 16, 2026 |
-| **Prize Targets** | Grand Prize $25k · Best Live Agents $10k · Best Innovation $5k |
 
 ---
 
@@ -133,8 +156,13 @@ mirror-app/
 │   └── firestore.indexes.json
 ├── scripts/
 │   └── deploy-all.sh             # One-command Cloud Run deployment
-├── cloudbuild.yaml               # CI/CD pipeline
-└── .github/workflows/ci.yml      # Validate + syntax check
+├── cloudbuild.yaml               # Cloud Build pipeline
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml                # Validate + syntax check
+│   │   └── deploy-cloudrun.yml   # Deploy to Cloud Run on push to main
+│   └── DEPLOY-CLOUDRUN-SETUP.md  # One-time GCP + GitHub secrets for CI/CD
+└── LICENSE                       # MIT
 ```
 
 ---
@@ -242,10 +270,21 @@ cd frontend/web && npm run dev
 
 Open `http://localhost:3000`
 
-### 7. Deploy to Cloud Run
+### 7. Deploy to Cloud Run (manual one-time or per release)
 ```bash
 bash scripts/deploy-all.sh
 ```
+
+**Or use CI/CD:** Push to `main` can auto-deploy backends (see [CI/CD](#-cicd) below). Frontend: connect this repo to [Vercel](https://vercel.com) and set env vars for production.
+
+---
+
+## 🔄 CI/CD
+
+- **Backend (Cloud Run)** — GitHub Actions workflow [`.github/workflows/deploy-cloudrun.yml`](.github/workflows/deploy-cloudrun.yml) builds and deploys all four services to Cloud Run on every push to `main`. Requires one-time [GCP Workload Identity setup](.github/DEPLOY-CLOUDRUN-SETUP.md) and GitHub secrets `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT_EMAIL`.
+- **Frontend (Vercel)** — Connect this repo in [Vercel](https://vercel.com) → Git integration. Set production env vars (`NEXT_PUBLIC_*_SERVICE_URL` to your Cloud Run URLs, plus Firebase web config). Each push to `main` triggers a new production deploy.
+
+One push to `main` → Cloud Run + Vercel updated.
 
 ---
 
@@ -330,7 +369,8 @@ After the session, all 4 personas give a scored debrief: verdict, strength, weak
 ---
 
 ## 📹 Demo Video
-[Coming March 15, 2026]
+
+
 
 ---
 

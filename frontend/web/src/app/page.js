@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { auth, signInAnon, onAuthStateChanged } from "../lib/firebase";
+import { auth, signInAnon, onAuthStateChanged, ensureFirebase } from "../lib/firebase";
 import { getProfile } from "../lib/api";
 import { useMirrorStore } from "../store";
 import Splash from "../components/Splash";
@@ -47,6 +47,9 @@ export default function App() {
   const { screen, setScreen, setUser, setProfile } = store;
 
   useEffect(() => {
+    // Ensure Firebase is initialized on the client before using `auth`.
+    ensureFirebase();
+
     // Pre-emptive anonymous sign in
     signInAnon().catch(() => {});
 

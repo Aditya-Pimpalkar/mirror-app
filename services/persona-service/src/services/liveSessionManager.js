@@ -67,6 +67,7 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
     currentBelief: persona.initialBelief,
     emotionSignals: [],
     isReady: false,
+    isSpeaking: false,
   };
 
   activeSessions.set(sessionId, session);
@@ -129,20 +130,45 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
         console.log("[Transcript] Output:", JSON.stringify(msg.outputTranscription));
       }
       if (msg.inputTranscription?.text) {
+        const isFinal = msg.inputTranscription.isFinal || false;
+        const text = msg.inputTranscription.text;
         safeSend(clientWs, {
           type: "user_transcript",
-          text: msg.inputTranscription.text,
-          isFinal: msg.inputTranscription.isFinal || false,
+          text,
+          isFinal,
         });
+        // When Live returns a final transcription of what the user just said,
+        // also log it server-side so unified threads include voice turns.
+        if (isFinal && text?.trim()) {
+          session.messages.push({
+            role: "user",
+            content: text.trim(),
+            timestamp: new Date().toISOString(),
+            mode: "voice",
+            source: "voice",
+          });
+        }
       }
 
       // ── Output transcription (what persona said) ──
       if (msg.outputTranscription?.text) {
+        const isFinal = msg.outputTranscription.isFinal || false;
+        const text = msg.outputTranscription.text;
         safeSend(clientWs, {
           type: "persona_transcript",
-          text: msg.outputTranscription.text,
-          isFinal: msg.outputTranscription.isFinal || false,
+          text,
+          isFinal,
         });
+        // Persist persona side of voice turns so unified thread includes it.
+        if (isFinal && text?.trim()) {
+          session.messages.push({
+            role: "assistant",
+            content: text.trim(),
+            timestamp: new Date().toISOString(),
+            mode: "voice",
+            source: "voice",
+          });
+        }
       }
 
       // ── Server content (audio/text chunks from Gemini) ──
@@ -167,6 +193,8 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
                 mimeType: part.inlineData.mimeType,
                 data: part.inlineData.data,
               });
+              // Mark persona as currently speaking so we can interrupt on new user input.
+              session.isSpeaking = true;
             }
             if (part.text && part.thought !== true) {
               // Text chunk — forward and accumulate for logging
@@ -186,9 +214,19 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
           // Track turn count
           session._turnCount = (session._turnCount || 0) + 1;
           console.log(`[LiveSession:${sessionId}] Turn complete #${session._turnCount}, belief: ${belief}`);
-          // Just notify client — no per-turn summary (avoids duplicates)
-          // Transcripts will show when user ends session
+          // Log assistant text for unified thread if we have any.
+          if (fullResponse?.trim()) {
+            session.messages.push({
+              role: "assistant",
+              content: fullResponse.trim(),
+              timestamp: new Date().toISOString(),
+              mode: "text",
+            });
+          }
+          // Notify client UI.
           safeSend(clientWs, { type: "turn_complete", text: fullResponse || null, belief });
+          // Persona finished speaking for this turn.
+          session.isSpeaking = false;
         }
       }
 
@@ -254,10 +292,10 @@ async function createLiveSession({ clientWs, userId, personaId, dossier, userNam
 You just had a real-time voice conversation with ${session.userName || "the user"} (${turnCount} turns).
 
 What the user said (SpeechRecognition captions):
-${userMsgs ? `"${userMsgs.slice(0, 800)}"` : "No user captions were captured."}
+${userMsgs ? `"${userMsgs.slice(0, 1800)}"` : "No user captions were captured."}
 
 What you (the persona) said (may be partial):
-${agentMsgs ? `"${agentMsgs.slice(0, 800)}"` : "No persona text was captured during the live audio session."}
+${agentMsgs ? `"${agentMsgs.slice(0, 1800)}"` : "No persona text was captured during the live audio session."}
 
 Write 2-3 sentences summarizing this conversation from your perspective.
 Stay in character. No preamble.`
@@ -303,11 +341,55 @@ async function handleClientMessage(sessionId, msg) {
     case "user_caption": {
       const text = msg.text?.trim();
       if (!text) return;
+
+      // If persona is mid-sentence, force an interrupt on the client side.
+      if (session.isSpeaking) {
+        safeSend(session.clientWs, { type: "interrupted" });
+        session.isSpeaking = false;
+      }
+
+      // Log the caption as a voice user message.
       session.messages.push({
         role: "user",
         content: text,
         timestamp: new Date().toISOString(),
         mode: "voice",
+        source: "voice",
+      });
+
+      // Treat captions as semantic text input to Gemini so emotion + evidence
+      // can shape the persona's next turn, just like typed messages.
+      if (geminiWs.readyState !== WebSocket.OPEN || !session.isReady) return;
+
+      const score = scoreMessage(session.personaId, text);
+      const newBelief = Math.min(95, Math.max(5, session.currentBelief + score.evidenceScore));
+      session.currentBelief = newBelief;
+
+      // Inject emotion signal if we have recent camera data.
+      let messageText = text;
+      if (session._latestEmotionSignal) {
+        const emotion = session._latestEmotionSignal;
+        if (emotion.dominant_emotion !== "neutral" && emotion.intensity > 0.5) {
+          messageText += `\n\n[PRIVATE CONTEXT FOR YOU, ${session.persona?.name || "the persona"}:\nThe user's facial expression shows ${emotion.dominant_emotion} (intensity ${emotion.intensity}). ${emotion.notable || ""}\nIf their words and expression seem mismatched, you may gently name the hesitation or discomfort in your next response and invite them to reflect on it.]`;
+        }
+      }
+
+      geminiWs.send(JSON.stringify({
+        client_content: {
+          turns: [{
+            role: "user",
+            parts: [{ text: messageText }],
+          }],
+          turn_complete: true,
+        },
+      }));
+
+      safeSend(session.clientWs, {
+        type: "belief_update",
+        belief: newBelief,
+        delta: score.evidenceScore,
+        hasEvidence: score.hasEvidence,
+        isEmotional: score.isEmotional,
       });
       break;
     }
@@ -316,7 +398,13 @@ async function handleClientMessage(sessionId, msg) {
     case "audio_input": {
       if (geminiWs.readyState !== WebSocket.OPEN) return;
       if (!session.isReady) return;
-geminiWs.send(JSON.stringify({
+      // If persona is currently speaking, cut them off visually on the client.
+      if (session.isSpeaking) {
+        safeSend(session.clientWs, { type: "interrupted" });
+        session.isSpeaking = false;
+      }
+
+      geminiWs.send(JSON.stringify({
         realtime_input: {
           media_chunks: [{
             mime_type: "audio/pcm;rate=16000",
@@ -355,7 +443,7 @@ geminiWs.send(JSON.stringify({
       if (session._latestEmotionSignal && score.hasEvidence === false) {
         const emotion = session._latestEmotionSignal;
         if (emotion.dominant_emotion !== "neutral" && emotion.intensity > 0.5) {
-          messageText += `\n\n[PRIVATE CONTEXT — DO NOT MENTION DIRECTLY unless it's natural: The person's facial expression shows ${emotion.dominant_emotion} (intensity: ${emotion.intensity}). ${emotion.notable || ""}. Their body language may be incongruent with their words.]`;
+          messageText += `\n\n[PRIVATE CONTEXT FOR YOU, ${session.persona?.name || "the persona"}:\nThe user's facial expression shows ${emotion.dominant_emotion} (intensity ${emotion.intensity}). ${emotion.notable || ""}\nIf their words and expression seem mismatched, you may gently name the hesitation or discomfort in your next response and invite them to reflect on it.]`;
         }
       }
 

@@ -1,13 +1,13 @@
 // src/lib/api.js
 // Central API client for all Mirror backend services
 
-import { getIdToken } from "./firebase";
-
 const PERSONA_URL = process.env.NEXT_PUBLIC_PERSONA_SERVICE_URL;
 const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_SERVICE_URL;
 const SYNTHESIS_URL = process.env.NEXT_PUBLIC_SYNTHESIS_SERVICE_URL;
 
 async function authHeaders() {
+  // Import lazily so Firebase doesn't initialize during server build/prerender.
+  const { getIdToken } = await import("./firebase");
   const token = await getIdToken();
   return {
     "Content-Type": "application/json",

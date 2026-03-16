@@ -64,14 +64,15 @@ export default function Settings() {
       const { getIdToken } = await import("../lib/firebase.js");
       const token = await getIdToken();
       const linkList = links.split("\n").map(l => l.trim()).filter(l => l.startsWith("http"));
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_PROFILE_SERVICE_URL || "http://localhost:8081"}/profile/onboard`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ bio, publicLinks: linkList, userName: profile?.userName }),
-        }
-      );
+      const baseUrl = process.env.NEXT_PUBLIC_PROFILE_SERVICE_URL;
+      if (!baseUrl) {
+        throw new Error("Profile service URL is not configured.");
+      }
+      const res = await fetch(`${baseUrl}/profile/onboard`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bio, publicLinks: linkList, userName: profile?.userName }),
+      });
       const data = await res.json();
       if (data.success) {
         // Refresh profile from server
