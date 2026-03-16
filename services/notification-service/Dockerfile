@@ -4,7 +4,8 @@ RUN apk add --no-cache dumb-init
 
 FROM base AS deps
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+# notification-service does not commit a lockfile, so npm ci would fail.
+RUN npm install --omit=dev && npm cache clean --force
 
 FROM base AS production
 ENV NODE_ENV=production
