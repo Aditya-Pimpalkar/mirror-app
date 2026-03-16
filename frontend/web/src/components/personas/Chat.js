@@ -24,6 +24,8 @@ export default function Chat() {
   const [streamingText, setStreamingText] = useState("");
   const [shareVerdict, setShareVerdict] = useState(null);
   const [emotionEnabled, setEmotionEnabled] = useState(false);
+  const [videoPos, setVideoPos] = useState({ x: 16, y: 120 }); // offset from bottom-right
+  const dragStateRef = useRef({ dragging: false, startX: 0, startY: 0, origX: 16, origY: 120 });
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const loadedPersonasRef = useRef(new Set());
@@ -187,6 +189,56 @@ export default function Chat() {
     enabled: emotionEnabled,
     onEmotionDetected: handleEmotion,
   });
+
+  // If Live voice disconnects, automatically stop camera + face reading.
+  useEffect(() => {
+    if (!isConnected && emotionEnabled) {
+      stopCamera();
+      setEmotionEnabled(false);
+    }
+  }, [isConnected, emotionEnabled, stopCamera]);
+
+  const beginDragVideo = useCallback((e) => {
+    if (!emotionEnabled || !isActive) return;
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    dragStateRef.current = {
+      dragging: true,
+      startX: clientX,
+      startY: clientY,
+      origX: videoPos.x,
+      origY: videoPos.y,
+    };
+  }, [emotionEnabled, isActive, videoPos.x, videoPos.y]);
+
+  useEffect(() => {
+    function onMove(e) {
+      if (!dragStateRef.current.dragging) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = clientX - dragStateRef.current.startX;
+      const dy = clientY - dragStateRef.current.startY;
+      const nextX = Math.max(8, dragStateRef.current.origX - dx);
+      const nextY = Math.max(8, dragStateRef.current.origY - dy);
+      setVideoPos({ x: nextX, y: nextY });
+    }
+    function endDrag() {
+      if (dragStateRef.current.dragging) {
+        dragStateRef.current.dragging = false;
+      }
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", endDrag);
+    window.addEventListener("touchmove", onMove);
+    window.addEventListener("touchend", endDrag);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", endDrag);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", endDrag);
+    };
+  }, []);
 
   // ── Browser speech recognition ────────────────────────────────────────────
   const startBrowserListening = useCallback(() => {
@@ -393,8 +445,36 @@ export default function Chat() {
           </button>
         )}
       </div>
-      {/* Camera elements — small preview when active */}
-      <video ref={videoRef} style={{ display: emotionEnabled && isActive ? "block" : "none", position: "fixed", bottom: 120, right: 16, width: 140, height: 105, borderRadius: 10, border: "1px solid rgba(107,163,214,0.4)", objectFit: "cover", zIndex: 50 }} muted playsInline />
+      {/* Camera elements — preview (draggable). Always mount when enabled so stream can attach. */}
+      {emotionEnabled && (
+        <div
+          onMouseDown={beginDragVideo}
+          onTouchStart={beginDragVideo}
+          style={{
+            position: "fixed",
+            bottom: videoPos.y,
+            right: videoPos.x,
+            width: 220,
+            height: 165,
+            borderRadius: 12,
+            border: "1px solid rgba(107,163,214,0.5)",
+            overflow: "hidden",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+            zIndex: 50,
+            background: "black",
+            cursor: "grab",
+            touchAction: "none",
+            opacity: isActive ? 1 : 0.6,
+          }}
+        >
+          <video
+            ref={videoRef}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            muted
+            playsInline
+          />
+        </div>
+      )}
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
       {/* Share Verdict modal */}
