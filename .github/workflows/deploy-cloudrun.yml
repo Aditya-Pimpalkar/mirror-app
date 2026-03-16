@@ -28,6 +28,13 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
           export_default_credentials: true
 
+      - name: Debug gcloud auth
+        run: |
+          echo "gcloud auth list:"
+          gcloud auth list
+          echo "Active account:"
+          gcloud auth list --format="value(account)" --filter="status:ACTIVE"
+
       - name: Configure Docker auth
         run: gcloud auth configure-docker "${{ env.GCP_REGION }}-docker.pkg.dev" --quiet
 
