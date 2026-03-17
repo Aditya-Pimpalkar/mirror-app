@@ -11,8 +11,8 @@ You speak your story. No public profiles required. Four AI personas interview yo
 ### Quick links
 | | |
 |---|---|
-| **Live app** | [Try Mirror](https://mirror-j20zc9tig-aditya-pimpalkars-projects.vercel.app) |
-| **Demo video** | [YouTube / Vimeo](https://www.youtube.com) *(replace with your ≤4 min demo link)* |
+| **Live app** | [Try Mirror](https://mirror-app-cyan.vercel.app/) |
+| **Demo video** | [YouTube](https://youtu.be/3dESSPl5Tbk)|
 | **Architecture** | Diagram below; backend runs on [Google Cloud Run](https://console.cloud.google.com/run) |
 | **Code** | This repo — public for judging |
 
@@ -360,17 +360,10 @@ After the session, all 4 personas give a scored debrief: verdict, strength, weak
 - [ ] Persona Evolution (beliefs persist and evolve over months)
 - [ ] 30/60/90 day snapshots
 
-### V2 (Summer 2026)
-- [ ] React Native mobile app
-- [ ] Mirror for Teams ($29/seat B2B)
-- [ ] Domain switching (career → parenting → creative)
-- [ ] On-device mode (privacy-first)
-
 ---
 
 ## 📹 Demo Video
-
-
+| [YouTube](https://youtu.be/3dESSPl5Tbk)|
 
 ---
 
