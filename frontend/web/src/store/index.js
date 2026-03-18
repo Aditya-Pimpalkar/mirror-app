@@ -46,15 +46,59 @@ export const useMirrorStore = create(
       lastConfrontation: null,
       setLastConfrontation: (result) => set({ lastConfrontation: result }),
       streaks: {},
-      updateStreak: (personaId, beliefImproved) =>
-        set((state) => ({
-          streaks: { ...state.streaks, [personaId]: beliefImproved ? (state.streaks[personaId] || 0) + 1 : 0 },
-        })),
-      reset: () => set({ user: null, profile: null, screen: "splash", activePersonaId: null, beliefs: INITIAL_BELIEFS, completedPersonas: [], gapScore: 72, conversations: {}, perceptionMap: null, archetype: null, mirrorMoment: null, lastConfrontation: null, streaks: {} }),
+      streakLastDate: {},
+      /**
+       * Daily streaks: first interaction with a persona per day increments.
+       * If you skip days, streak resets to 0 before incrementing for today.
+       */
+      updateStreak: (personaId) =>
+        set((state) => {
+          const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+          const last = state.streakLastDate?.[personaId] || null;
+          if (last === today) return state; // already counted today
+
+          const prevStreak = state.streaks?.[personaId] || 0;
+          let nextStreak = 1;
+          if (last) {
+            const lastDate = new Date(last + "T00:00:00Z");
+            const todayDate = new Date(today + "T00:00:00Z");
+            const diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+            nextStreak = diffDays === 1 ? prevStreak + 1 : 1;
+          }
+
+          return {
+            streaks: { ...state.streaks, [personaId]: nextStreak },
+            streakLastDate: { ...(state.streakLastDate || {}), [personaId]: today },
+          };
+        }),
+      reset: () =>
+        set({
+          user: null,
+          profile: null,
+          screen: "splash",
+          activePersonaId: null,
+          beliefs: INITIAL_BELIEFS,
+          completedPersonas: [],
+          gapScore: 72,
+          conversations: {},
+          perceptionMap: null,
+          archetype: null,
+          mirrorMoment: null,
+          lastConfrontation: null,
+          streaks: {},
+          streakLastDate: {},
+        }),
     }),
     {
       name: "mirror-store",
-      partialize: (state) => ({ beliefs: state.beliefs, completedPersonas: state.completedPersonas, gapScore: state.gapScore, archetype: state.archetype, streaks: state.streaks }),
+      partialize: (state) => ({
+        beliefs: state.beliefs,
+        completedPersonas: state.completedPersonas,
+        gapScore: state.gapScore,
+        archetype: state.archetype,
+        streaks: state.streaks,
+        streakLastDate: state.streakLastDate,
+      }),
     }
   )
 );

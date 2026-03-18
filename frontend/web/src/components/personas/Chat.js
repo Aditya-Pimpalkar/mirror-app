@@ -30,6 +30,8 @@ export default function Chat() {
   const recognitionRef = useRef(null);
   const loadedPersonasRef = useRef(new Set());
   const openingAddedRef = useRef(new Set());
+  const hadActivityRef = useRef(false);      // any user turn (text or voice) this session
+  const streakUpdatedRef = useRef(false);    // ensure we only bump streak once per session
 
   const belief = beliefs[activePersonaId] || persona?.initialBelief || 20;
 
@@ -91,6 +93,7 @@ export default function Chat() {
           addMessage(activePersonaId, { role: "assistant", content: msg.text.trim(), timestamp: new Date().toISOString(), mode: "voice" });
         }
       } else if (msg.type === "user_transcript" && msg.isFinal && msg.text?.trim()) {
+        hadActivityRef.current = true;
         addMessage(activePersonaId, { role: "user", content: msg.text, timestamp: new Date().toISOString(), mode: "voice" });
       } else if (msg.type === "persona_transcript" && msg.isFinal && msg.text?.trim()) {
         addMessage(activePersonaId, { role: "assistant", content: msg.text, timestamp: new Date().toISOString(), mode: "voice" });
@@ -139,6 +142,8 @@ export default function Chat() {
       if (!result?.isFinal) return;
       const text = result[0]?.transcript?.trim();
       if (!text) return;
+      hadActivityRef.current = true;
+      updateStreak(activePersonaId);
       addMessage(activePersonaId, {
         role: "user",
         content: text,
@@ -148,18 +153,8 @@ export default function Chat() {
       sendCaption?.(text);
     };
 
-    rec.onend = () => {
-      // Auto-restart so it keeps listening throughout the session
-      if (isConnected) {
-        try { rec.start(); } catch {}
-      }
-    };
-
-    rec.onerror = (e) => {
-      if (e.error !== "aborted" && isConnected) {
-        try { rec.start(); } catch {}
-      }
-    };
+    rec.onend = () => {};
+    rec.onerror = () => {};
 
     try { rec.start(); } catch {}
 
@@ -168,7 +163,8 @@ export default function Chat() {
     };
   }, [isConnected, activePersonaId]);
 
-  // After Live voice ends, mark thread as stale so it reloads on next entry.
+  // After Live voice ends, mark thread as stale so it reloads on next entry,
+  // and bump streaks once if the user actually did anything this session.
   const prevConnectedRef = useRef(false);
   useEffect(() => {
     const wasConnected = prevConnectedRef.current;
@@ -176,8 +172,11 @@ export default function Chat() {
     if (wasConnected && !isConnected) {
       // Mark this persona's thread as stale so it reloads next time chat opens
       loadedPersonasRef.current.delete(activePersonaId);
+      // Daily streak is already updated at first interaction; reset session flags.
+      hadActivityRef.current = false;
+      streakUpdatedRef.current = false;
     }
-  }, [isConnected, activePersonaId]);
+  }, [isConnected, activePersonaId, updateStreak]);
 
   const handleEmotion = useCallback((obs) => {
     console.log("[Emotion]", obs);
@@ -263,6 +262,8 @@ export default function Chat() {
   const sendMessage = async () => {
     const text = voiceMode ? transcript : inputText;
     if (!text.trim() || isLoading) return;
+    hadActivityRef.current = true;
+    updateStreak(activePersonaId);
     addMessage(activePersonaId, { role: "user", content: text.trim(), timestamp: new Date().toISOString() });
     setInputText("");
     setTranscript("");
