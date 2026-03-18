@@ -214,9 +214,8 @@ export default function Home() {
       </div>
 
       {/* Conviction Streaks */}
-      {Object.values(streaks).some(s => s > 0) && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="label" style={{ marginBottom: 14 }}>CONVICTION STREAKS</div>
+      <div className="card" style={{ marginBottom: 16, opacity: Object.values(streaks).some(s => s > 0) ? 1 : 0.85 }}>
+        <div className="label" style={{ marginBottom: 14 }}>CONVICTION STREAKS</div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             {Object.values(PERSONAS).map((p) => {
               const streak = streaks[p.id] || 0;
@@ -242,8 +241,7 @@ export default function Home() {
               {Math.max(...Object.values(streaks)) >= 7 ? "🔥 On fire. The personas are noticing." : "Keep going. Consistency shifts belief."}
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Action buttons */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
